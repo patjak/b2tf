@@ -143,7 +143,6 @@ class Log {
 				$var[] = $tag;
 			else
 				$var = $tag;
-				
 		}
 	}
 
@@ -158,7 +157,6 @@ class Log {
 		}
 		
 		return $res;
-	
 	}
 
 	public function update_commit($upstream_id, $backport_id) {
@@ -276,6 +274,38 @@ class GitRepo {
 
 		return $paths;
 	}
+
+	public function change_branch($branch, $log)
+	{
+		$range_start = $log->get_head_tag("range-start");
+
+		if (get_current_branch_name() != $branch) {
+			git_cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
+			if ($status != 0)
+				git_cmd("git checkout -b ".$branch." ".$range_start);
+		}
+
+		// Sanity check the branch
+		if (get_current_branch_name() != $branch)
+			fatal("Couldn't create/find correct branch");
+	}
+
+	public function find_commit_index($commit, $patches)
+	{
+		// Find where in the series we currently are
+		$num = count($patches);
+		for ($i = 0; $i < $num; $i++) {
+			if ($commit == $patches[$i]->commit_id) {
+				break;
+			}
+		}
+
+		// If commit is not found we start from beginning (return 0)
+		if ($i == $num)
+			$i = 0;
+
+		return $i;
+	}
 }
 
 function array_to_str($array)
@@ -383,38 +413,6 @@ function launch_editor($unmerged, $p, $log)
 
 		exec("rm ".$work_dir."/".$solution_name);
 	}
-}
-
-function change_branch($branch, $log)
-{
-	$range_start = $log->get_head_tag("range-start");
-
-	if (get_current_branch_name() != $branch) {
-		git_cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
-		if ($status != 0)
-			git_cmd("git checkout -b ".$branch." ".$range_start);
-	}
-
-	// Sanity check the branch
-	if (get_current_branch_name() != $branch)
-		fatal("Couldn't create/find correct branch");
-}
-
-function find_commit_index($commit, $patches)
-{
-	// Find where in the series we currently are
-	$num = count($patches);
-	for ($i = 0; $i < $num; $i++) {
-		if ($commit == $patches[$i]->commit_id) {
-			break;
-		}
-	}
-
-	// If commit is not found we start from beginning (return 0)
-	if ($i == $num)
-		$i = 0;
-
-	return $i;
 }
 
 function cmd_apply($argv)
