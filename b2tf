@@ -329,13 +329,13 @@ class GitRepo {
 		$conflicts = FALSE;
 
 		foreach ($modified as $m) {
-			$git->cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
+			$this->cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
-			$git->cmd("grep -Hn \"=======\" ".$m, $res);
+			$this->cmd("grep -Hn \"=======\" ".$m, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
-			$git->cmd("grep -Hn \">>>>>>>\" ".$m, $res);
+			$this->cmd("grep -Hn \">>>>>>>\" ".$m, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
 		}
