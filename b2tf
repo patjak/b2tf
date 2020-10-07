@@ -203,7 +203,7 @@ class Log {
 	}
 
 	// Find the next patch to process from the commit log
-	function get_next()
+	function get_next_commit()
 	{
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
@@ -212,14 +212,11 @@ class Log {
 			if ($line == "")
 				continue;
 			$line = explode(" ", $line);
-			if (count($line) == 0) {
-				error("EMPTY");
-				continue;
-			}
 			if ($line[0] == "#")
 				continue;
-
-			if (!isset($line[1]))
+			if (count($line) == 1)
+				return $line[0];
+			if ($line[1] == "")
 				return $line[0];
 		}
 	}
@@ -457,7 +454,7 @@ function cmd_apply($argv)
 
 	$patches = Patch::get_patches($work_dir);
 	$num_patches = count($patches);
-	$next_commit = $log->get_next();
+	$next_commit = $log->get_next_commit();
 	$i = $git->find_commit_index($next_commit, $patches);
 
 	// We are resuming the apply!
