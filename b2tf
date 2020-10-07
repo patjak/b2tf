@@ -64,16 +64,6 @@ class Patch {
 		}
 	}
 
-	public static function get_by_commit($commit, $patches)
-	{
-		foreach($patches as $p) {
-			if ($p->commit_id == $commit)
-				return $p;
-		}
-
-		return FALSE;
-	}
-
 	public function parse($filename) {
 		$file = file_get_contents($filename);
 		$file = explode("---".PHP_EOL, $file);
@@ -99,6 +89,29 @@ class Patch {
 		}
 
 		$this->cherry_pick = substr($this->cherry_pick, 0, -1);
+	}
+
+	public static function get_by_commit($commit, $patches)
+	{
+		foreach($patches as $p) {
+			if ($p->commit_id == $commit)
+				return $p;
+		}
+
+		return FALSE;
+	}
+
+	public static function get_patches($work_dir)
+	{
+		$files = get_patch_filenames($work_dir);
+		$patches = array();
+		foreach ($files as $file) {
+			$p = new Patch();
+			$p->parse($file);
+			$patches[] = $p;
+		}
+
+		return $patches;
 	}
 }
 
@@ -326,19 +339,6 @@ function get_patch_filenames($dir)
 	return $files;
 }
 
-function get_patches($work_dir)
-{
-	$files = get_patch_filenames($work_dir);
-	$patches = array();
-	foreach ($files as $file) {
-		$p = new Patch();
-		$p->parse($file);
-		$patches[] = $p;
-	}
-
-	return $patches;
-}
-
 function cmd_export($argv, $opts)
 {
 	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
@@ -437,7 +437,7 @@ function cmd_apply($argv)
 
 	change_branch($branch_name, $log);
 
-	$patches = get_patches($work_dir);
+	$patches = Patch::get_patches($work_dir);
 	$num_patches = count($patches);
 	$next_commit = $log->get_next();
 	$i = find_commit_index($next_commit, $patches);
