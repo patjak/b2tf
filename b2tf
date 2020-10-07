@@ -1,0 +1,685 @@
+#!/usr/bin/php
+<?php
+
+define("DEBUG", true);
+
+// How long back in commit history we check for cherry picks
+define("CHERRY_PICK_HISTORY", 4000);
+
+$program_name = basename($argv[0]);
+
+function fatal($msg)
+{
+	echo "\e[31m".$msg."\e[0m\n";
+	exit(1);
+}
+
+function error($msg)
+{
+	echo "\e[31m".$msg."\e[0m\n";
+}
+
+function info($msg)
+{
+	echo "\e[34m".$msg."\e[0m\n";
+}
+
+function green($msg)
+{
+	echo "\e[32m".$msg."\e[0m\n";
+}
+
+function debug($msg)
+{
+	if (DEBUG) 
+		echo "\e[33m".$msg."\e[0m\n";
+}
+
+function delimiter()
+{
+	echo "\e[33m----------\e[0m\n";
+}
+
+class Patch {
+	var $filename; // Includes the full path
+	var $commit_id; // Hash
+	var $author;
+	var $date;
+	var $subject;
+	var $signatures = array();
+	var $reviews = array();
+	var $cherry_pick;
+
+	// Get the contents of a tag and store in $var
+	private function get_tag($line, $tag, &$var) {
+		if (substr($line, 0, strlen($tag)) === $tag) {
+			$tag = substr($line, strlen($tag));
+
+			// Append to array if needed
+			if (is_array($var))
+				$var[] = $tag;
+			else
+				$var = $tag;
+				
+		}
+	}
+
+	public static function get_by_commit($commit, $patches)
+	{
+		foreach($patches as $p) {
+			if ($p->commit_id == $commit)
+				return $p;
+		}
+
+		return FALSE;
+	}
+
+	public function parse($filename) {
+		$file = file_get_contents($filename);
+		$file = explode("---".PHP_EOL, $file);
+		$head = $file[0];
+		$body = $file[1];
+
+		$head = explode(PHP_EOL, $head);
+
+		// First line is always commit id
+		$commit_id = array_shift($head);
+		$commit_id = explode(" ", $commit_id);
+		$this->commit_id = $commit_id[1];
+
+		// Parse rest of head
+		foreach($head as $line) {
+			$this->filename = realpath($filename);
+			$this->get_tag($line, "From: ", $this->author);
+			$this->get_tag($line, "Date: ", $this->date);
+			$this->get_tag($line, "Subject: ", $this->subject);
+			$this->get_tag($line, "Signed-off-by: ", $this->signatures);
+			$this->get_tag($line, "Reviewed-by: ", $this->reviews);
+			$this->get_tag($line, "(cherry picked from commit ", $this->cherry_pick);
+		}
+
+		$this->cherry_pick = substr($this->cherry_pick, 0, -1);
+	}
+}
+
+class Log {
+	var $filename = FALSE;
+	var $head;
+	var $body;
+
+	public function load($filename) {
+		$this->filename = $filename;
+		$tmp = file_get_contents($filename);
+		if ($tmp === FALSE || strlen($tmp) == 0)
+			return FALSE;
+
+		$tmp = explode("---".PHP_EOL, $tmp);
+		$this->head = $tmp[0];
+		$this->body = $tmp[1];
+	}
+
+	public function save($filename = FALSE) {
+		$contents  = $this->head."---".PHP_EOL.$this->body;
+		if ($filename === FALSE)
+			$filename = $this->filename;
+		file_put_contents($filename, $contents);
+	}
+
+	public function get_head() { return $this->head; }
+	public function append_head($str) { $this->head .= $str; }
+
+	public function get_body() { return $this->body; }
+	public function set_body($body) { $this->body = $body; }
+	public function append_body($str) { $this->body .= $str; }
+
+	// Get the contents of a tag and store in $var
+	private function get_tag($line, $tag, &$var) {
+		$tag = strtolower($tag);
+		if (strtolower(substr($line, 0, strlen($tag))) === $tag) {
+			$tag = substr($line, strlen($tag));
+
+			// Append to array if needed
+			if (is_array($var))
+				$var[] = $tag;
+			else
+				$var = $tag;
+				
+		}
+	}
+
+	public function get_head_tag($tag) {
+		if ($this->filename === FALSE)
+			return FALSE;
+
+		$head = explode(PHP_EOL, $this->get_head());
+
+		foreach($head as $line) {
+			$this->get_tag($line, $tag.": ", $res);
+		}
+		
+		return $res;
+	
+	}
+
+	public function update_commit($upstream_id, $backport_id) {
+		if ($this->filename === FALSE)
+			return FALSE;
+
+		$body = explode(PHP_EOL, $this->get_body());
+
+		// Find row
+		for ($i = 0; $i < count($body); $i++) {
+			$line = $body[$i];
+			if (trim($line) == "")
+				continue;
+
+			$line = explode(" ", $line);
+			if ($line[0] == "#")
+				continue;
+	
+			if ($line[0] == $upstream_id) {
+				$body[$i] = $upstream_id." ".$backport_id;
+				break;
+			}
+		}
+
+		if ($i == count($body))
+			fatal("Couldn't find upstream commit: ".$upstream_id);
+
+		$body = implode(PHP_EOL, $body);
+		$this->set_body($body);
+		$this->save();
+	}
+
+	// Find the next patch to process from the commit log
+	function get_next()
+	{
+		$body = $this->get_body();
+		$body = explode(PHP_EOL, $body);
+
+		foreach ($body as $line) {
+			if ($line == "")
+				continue;
+			$line = explode(" ", $line);
+			if (count($line) == 0) {
+				error("EMPTY");
+				continue;
+			}
+			if ($line[0] == "#")
+				continue;
+
+			if (!isset($line[1]))
+				return $line[0];
+		}
+
+		error("Couldn't find next commit to process");
+	}
+}
+
+class GitRepo {
+	var $dir;
+
+	public function set_dir($dir) { $this->dir = $dir; }
+
+	public function cmd($cmd, &$output = FALSE, &$status = FALSE) {
+		exec("cd ".$this->dir." && ".$cmd, $output, $status);
+	}
+
+	public function get_current_branch_name() {
+		$this->cmd("git branch --show-current", $name);
+
+		return $name[0];
+	}
+
+	public function get_current_commit_id() {
+		$this->cmd("git rev-list HEAD~1..HEAD", $git_head);
+
+		return $git_head[0];
+	}
+
+	public function get_unmerged_paths() {
+		git_cmd("git status", $output);
+
+		while (count($output) > 0 && $output[0] != "Unmerged paths:")
+			array_shift($output);
+
+		// Parse the modified files from output
+		$output = array_splice($output, 3);
+		$paths = array();
+		foreach ($output as $o) {
+			if ($o == "")
+				break;
+			$o = explode(":", $o);
+			$paths[] = trim($o[1]);
+		}
+
+		return $paths;
+	}
+
+	public function get_modified_paths() {
+		git_cmd("git status", $output);
+
+		while (count($output) > 0 && $output[0] != "Changes to be committed:")
+			array_shift($output);
+
+		$output = array_splice($output, 2);
+
+		$paths = array();
+		foreach ($output as $o) {
+			$o = trim($o);
+			if ($o == "")
+				break;
+
+			$o = explode(":", $o);
+			$paths[] = trim($o[1]);
+		}
+
+		return $paths;
+	}
+}
+
+function array_to_str($array)
+{
+	$out = "";
+	foreach($array as $line)
+		$out .= $line."\n";
+
+	return $out;
+}
+
+// Returns filenames for all the exported patches
+function get_patch_filenames($dir)
+{
+	$dir = realpath($dir);
+	exec("find ".$dir."| sort | grep \"\\.patch\"", $files);
+
+	return $files;
+}
+
+function get_patches($work_dir)
+{
+	$files = get_patch_filenames($work_dir);
+	$patches = array();
+	foreach ($files as $file) {
+		$p = new Patch();
+		$p->parse($file);
+		$patches[] = $p;
+	}
+
+	return $patches;
+}
+
+function cmd_export($argv, $opts)
+{
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
+
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$start = $log->get_head_tag("range-start");
+	$stop = $log->get_head_tag("range-stop");
+	$git_dir = $log->get_head_tag("git-dir");
+	$paths = $log->get_head_tag("paths");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	// Execute git format-patch
+	echo "Extracting patches...";
+
+	$git->cmd("git format-patch --topo-order --keep-subject --no-merges -o ".
+		 $work_dir." ".$start."..".$stop." ".$paths);
+
+	$log->set_body("#         <Upstream commit id>".
+		       "                   <Backported commit id>\n");
+	$files = get_patch_filenames($work_dir);
+	$patches = array();
+	foreach ($files as $file) {
+		$p = new Patch();
+		$p->parse($file);
+		$patches[] = $p;
+		$log->append_body($p->commit_id."\n");
+	}
+
+	$log->save($work_dir."/commits.log");
+
+	echo count($files)."\n";
+	exit();
+}
+
+function skip_patch($log, $p)
+{
+	git_cmd("git am --skip");
+	$log->update_commit($p->commit_id, "skipped");
+}
+
+function launch_editor($unmerged, $p, $log)
+{
+	$work_dir = $log->get_head_tag("work-dir");
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$solutions = "";
+	foreach ($unmerged as $i => $u) {
+		// Figure out the extension so that the editor can do syntax highlighting
+		$info = pathinfo($u);
+		$file_ext = isset($info['extension']) ? $info['extension'] : "";
+		if ($file_ext != "")
+			$file_ext = ".".$file_ext;
+		$solution_name = "solution-tmp".$file_ext;
+
+		// Store the target version of the file (eg git show v5.5:<filename>)
+		git_cmd("git show ".$log->get_head_tag("Range-stop").":".$u." | ".
+			"dd of=".$work_dir."/".$solution_name." 2> /dev/null", $output, $status);
+
+		// Add the entire path to modified files
+		$u = $linux_git."/".$u;
+
+		// Open vim with all the relevant files
+		passthru("vim -O ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
+
+		exec("rm ".$work_dir."/".$solution_name);
+	}
+}
+
+function change_branch($branch, $log)
+{
+	$range_start = $log->get_head_tag("range-start");
+
+	if (get_current_branch_name() != $branch) {
+		git_cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
+		if ($status != 0)
+			git_cmd("git checkout -b ".$branch." ".$range_start);
+	}
+
+	// Sanity check the branch
+	if (get_current_branch_name() != $branch)
+		fatal("Couldn't create/find correct branch");
+}
+
+function find_commit_index($commit, $patches)
+{
+	// Find where in the series we currently are
+	$num = count($patches);
+	for ($i = 0; $i < $num; $i++) {
+		if ($commit == $patches[$i]->commit_id) {
+			break;
+		}
+	}
+
+	// If commit is not found we start from beginning (return 0)
+	if ($i == $num)
+		$i = 0;
+
+	return $i;
+}
+
+function cmd_apply($argv)
+{
+	global $program_name;
+
+	if (isset($argv[2]))
+		$work_dir = realpath($argv[2]);
+	else
+		fatal("No patch directory specified");
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	if (isset($argv[3]))
+		$branch_name = $argv[3];
+	else
+		fatal("No name branch specified");
+
+	$linux_git = get_linux_git();
+	$range_start = $log->get_head_tag("range-start");
+
+	change_branch($branch_name, $log);
+
+	$patches = get_patches($work_dir);
+	$num_patches = count($patches);
+	$next_commit = $log->get_next();
+	$i = find_commit_index($next_commit, $patches);
+
+	// We are resuming the apply!
+	if ($i > 0) {
+		$p = Patch::get_by_commit($next_commit, $patches);
+		info("Resuming at (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+
+		$unmerged = get_unmerged_paths();
+		if (count($unmerged) > 0) {
+			error("Repository contains unmerged paths. Solve conflict before continuing.");
+			launch_editor($unmerged, $p, $log);
+			exit(1);
+		}
+
+		// Check for empty patch that needs skipping
+		/*
+		$modified = get_modified_paths();
+		if (count($modified) == 0) {
+			info("No changes where made. Skipping patch.");
+			info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+			$log->update_commit($p->commit_id, "skipped");
+			skip_patch($log, $p);
+		}
+		*/
+
+		// Check that none of the modified paths still contain conflicts
+		$fatal = FALSE;
+		foreach ($modified as $m) {
+			git_cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
+			if (count($res) > 0)
+				$fatal = TRUE;
+			git_cmd("grep -Hn \"=======\" ".$m, $res);
+			if (count($res) > 0)
+				$fatal = TRUE;
+			git_cmd("grep -Hn \">>>>>>>\" ".$m, $res);
+			if (count($res) > 0)
+				$fatal = TRUE;
+		}
+		if ($fatal)
+			fatal("Modified files still contain unfixed conflicts:\n".array_to_str($res));
+
+		git_cmd("git am --continue");
+
+		$backport_id = get_current_commit_id();
+
+		$log->update_commit($p->commit_id, $backport_id);
+		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+		$i++;
+	}
+
+	$workdir = $log->get_head_tag("work-dir");
+
+	for (; $i < $num_patches; $i++) {
+		$p = $patches[$i];
+		$filename = $p->filename;
+		$output_am = "";
+		git_cmd("git am --3way ".$filename." 2> /dev/stdout", $output_am, $status);
+
+		if ($status != 0) {
+			// Save git am output to file so we can show it in edit (vim, emacs, etc.)
+			file_put_contents($workdir."/output.tmp", array_to_str($output_am));
+
+			// Check if patch is already cherry picked
+			$range_start = $log->get_head_tag("range-start");
+			$res = NULL;
+			git_cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
+			     "..".$range_start." -n1 --oneline --grep=\"cherry picked from commit ".
+			     $p->commit_id."\"", $res);
+
+			if (count($res) > 0) {
+				info("Patch found in preceding cheery pick (".$res[0].")");
+				info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+				skip_patch($log, $p);
+				continue;
+			}
+
+			delimiter();
+			echo array_to_str($output_am);
+
+			delimiter();
+			echo "Unmerged paths:\n";
+			$unmerged = get_unmerged_paths();
+			error(array_to_str($unmerged));
+
+			delimiter();
+			error("Failed patch: ".basename($p->filename));
+
+			delimiter();
+			echo "Fix conflict and rerun apply.\n";
+			echo "1. Fix conflict, 2. git add <fixed-files>, 3. ".$program_name." apply <work-dir>\n";
+			info("(IMPORTANT! Do not run: git am --continue)");
+
+			launch_editor($unmerged, $p, $log);
+			exit();
+		}
+
+		// Patch might not have introduced changes thus did not get applied (not needed)
+		$old_id = isset($backport_id) ? $backport_id : "";
+		$backport_id = get_current_commit_id();
+
+		if ($old_id == $backport_id) {
+			info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+			$log->update_commit($p->commit_id, "skipped");
+			continue;
+		}
+		$log->update_commit($p->commit_id, $backport_id);
+		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+	
+/*
+		git_cmd("make -j16 M=drivers/gpu/drm", $res, $status);
+		if ($status != 0)
+			fatal("Compilation failed!");
+*/
+	}
+
+	exit();
+}
+
+function cmd_skip($argv)
+{
+	if (isset($argv[2]))
+		$work_dir = realpath($argv[2]);
+	else
+		fatal("No patch directory specified");
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	if (isset($argv[3]))
+		$branch_name = $argv[3];
+	else
+		fatal("No name branch specified");
+
+	change_branch($branch_name);
+
+	$i = find_next_patch_index($work_dir, $log);
+}
+
+function cmd_setup($argv, $opts)
+{
+	$range_start = isset($opts['start']) ? $opts['start'] : "";
+	if ($range_start == "")
+		fatal("Missing --start <arg>");
+
+	$range_stop = isset($opts['stop']) ? $opts['stop'] : "";
+	if ($range_stop == "")
+		fatal("Missing --stop <arg>");
+
+	$branch = isset($opts['branch']) ? $opts['branch'] : "";
+	if ($branch == "")
+		fatal("Missing --branch <arg>");
+
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
+
+	$git_dir = isset($opts['git-dir']) ? $opts['git-dir'] : "";
+	$git_dir = realpath($git_dir);
+	if ($git_dir == "")
+		fatal("Missing --git-dir <arg>");
+
+	$paths = isset($opts['paths']) ? $opts['paths'] : "";
+	if ($paths == "")
+		fatal("Missing --paths <args>");
+
+	$log = new Log();
+	$log->append_head("Range-start: ".$range_start."\n");
+	$log->append_head("Range-stop: ".$range_stop."\n");
+	$log->append_head("Branch: ".$branch."\n");
+	$log->append_head("Work-dir: ".$work_dir."\n");
+	$log->append_head("Git-dir: ".$git_dir."\n");
+	$log->append_head("Paths: ".$paths."\n");
+
+	$log->save($work_dir."/commits.log");
+
+	info("Setup saved to ".$work_dir."/commits.log");
+	exit(0);
+}
+
+function cmd_add($argv)
+{
+	
+}
+
+function parse_options($argv)
+{
+	$opts = array(
+		"start:",
+		"stop:",
+		"branch:",
+		"work-dir:",
+		"git-dir:",
+		"paths:",
+		);
+
+	$options = getopt("", $opts, $optind);
+
+	if (isset($argv[$optind]))
+		$command = $argv[$optind];
+	else
+		return;
+
+
+	switch($command) {
+	case "setup":
+		cmd_setup($argv, $options);
+		break;
+	case "export":
+		cmd_export($argv, $options);
+		break;
+	case "apply":
+		cmd_apply($argv);
+		break;
+	case "skip":
+		cmd_skip($argv);
+		break;
+	case "add":
+		cmd_add($argv);
+		break;
+	}
+}
+
+parse_options($argv);
+
+?>
+
+Usage: <?= $program_name ?> <command> <options> <arguments>
+
+Important! LINUX_GIT must point to a linux git repository.
+
+Commands:
+	export <range-start> <range-stop> <work-dir> [paths]
+	apply <work-dir> <branch-name>
+	skip <work-dir> <branch-name>
+
+Examples:
+	Create series of patches (git format-patch)
+	<?= $argv[0] ?> get-series
+
