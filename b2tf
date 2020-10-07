@@ -629,7 +629,70 @@ function cmd_setup($argv, $opts)
 
 function cmd_add($argv)
 {
-	
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$fatal = $git->check_for_conflicts();
+	if ($fatal)
+		fatal("Unmerged paths still contain conflicts!");
+
+	$unmerged = $git->get_unmerged_paths();
+	foreach ($unmerged as $u) {
+		$git->cmd("git add ".$u);
+	}
+
+	$modified = $git->get_modified_paths();
+	echo "Added files:\n";
+	foreach ($modified as $m) {
+		green("\t".$m);
+	}
+
+	exit(0);
+}
+
+function cmd_reset($argv)
+{
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+	$git->cmd("git am --abort");
+	$git->cmd("git checkout master");
+	$git->cmd("git branch -D ".$branch);
+
+	$patches = Patch::get_patches($work_dir);
+	foreach ($patches as $p)
+		$log->update_commit($p->commit_id, "");
+
+	exit(0);
 }
 
 function parse_options($argv)
@@ -666,6 +729,9 @@ function parse_options($argv)
 		break;
 	case "add":
 		cmd_add($argv);
+		break;
+	case "reset":
+		cmd_reset($argv);
 		break;
 	}
 }
