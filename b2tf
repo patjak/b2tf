@@ -319,10 +319,31 @@ class GitRepo {
 		return $i;
 	}
 
-	function skip_commit($log, $p)
+	public function skip_commit($log, $p)
 	{
 		$this->cmd("git am --skip");
 		$log->update_commit($p->commit_id, "skipped");
+	}
+
+	public function check_for_conflicts()
+	{
+		// Check that none of the modified paths still contain conflicts
+		$modified = $this->get_modified_paths();
+		$conflicts = FALSE;
+
+		foreach ($modified as $m) {
+			$git->cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
+			if (count($res) > 0)
+				$conflicts = TRUE;
+			$git->cmd("grep -Hn \"=======\" ".$m, $res);
+			if (count($res) > 0)
+				$conflicts = TRUE;
+			$git->cmd("grep -Hn \">>>>>>>\" ".$m, $res);
+			if (count($res) > 0)
+				$conflicts = TRUE;
+		}
+
+		return $conflicts;
 	}
 }
 
@@ -462,19 +483,7 @@ function cmd_apply($argv)
 		}
 		*/
 
-		// Check that none of the modified paths still contain conflicts
-		$fatal = FALSE;
-		foreach ($modified as $m) {
-			$git->cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
-			if (count($res) > 0)
-				$fatal = TRUE;
-			$git->cmd("grep -Hn \"=======\" ".$m, $res);
-			if (count($res) > 0)
-				$fatal = TRUE;
-			$git->cmd("grep -Hn \">>>>>>>\" ".$m, $res);
-			if (count($res) > 0)
-				$fatal = TRUE;
-		}
+		$fatal = $git->check_for_conflicts();
 		if ($fatal)
 			fatal("Modified files still contain unfixed conflicts:\n".array_to_str($res));
 
