@@ -424,8 +424,14 @@ function launch_editor($unmerged, $p, $log, $git)
 		// Add the entire path to modified files
 		$u = $git->get_dir()."/".$u;
 
+		// Find line number for first conflict
+		$git->cmd("grep -n \"<<<<<\" ".$u, $res);
+		$res = explode(":", $res[0]);
+		$line_no = $res[0];
+
 		// Open vim with all the relevant files
-		passthru("vim -O ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
+		info("Executing: vim -O +".$line_no." ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
+		passthru("vim -O +".$line_no." ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
 
 		exec("rm ".$work_dir."/".$solution_name);
 	}
