@@ -231,6 +231,7 @@ class GitRepo {
 	var $dir;
 
 	public function set_dir($dir) { $this->dir = $dir; }
+	public function get_dir($dir) { return $this->dir; }
 
 	public function cmd($cmd, &$output = FALSE, &$status = FALSE) {
 		exec("cd ".$this->dir." && ".$cmd, $output, $status);
@@ -249,7 +250,7 @@ class GitRepo {
 	}
 
 	public function get_unmerged_paths() {
-		git_cmd("git status", $output);
+		$this->cmd("git status", $output);
 
 		while (count($output) > 0 && $output[0] != "Unmerged paths:")
 			array_shift($output);
@@ -268,7 +269,7 @@ class GitRepo {
 	}
 
 	public function get_modified_paths() {
-		git_cmd("git status", $output);
+		$this->cmd("git status", $output);
 
 		while (count($output) > 0 && $output[0] != "Changes to be committed:")
 			array_shift($output);
@@ -299,7 +300,7 @@ class GitRepo {
 		}
 
 		// Sanity check the branch
-		if (get_current_branch() != $branch)
+		if ($this->get_current_branch() != $branch)
 			fatal("Couldn't create/find correct branch");
 	}
 
@@ -387,10 +388,12 @@ function cmd_export($argv, $opts)
 	exit();
 }
 
-function launch_editor($unmerged, $p, $log)
+function launch_editor($unmerged, $p, $log, $git)
 {
 	$work_dir = $log->get_head_tag("work-dir");
-	$git_dir = $log->get_head_tag("git-dir");
+	$git_dir = $git->get_dir();
+
+	$git = new GitRepo();
 
 	$solutions = "";
 	foreach ($unmerged as $i => $u) {
@@ -402,7 +405,7 @@ function launch_editor($unmerged, $p, $log)
 		$solution_name = "solution-tmp".$file_ext;
 
 		// Store the target version of the file (eg git show v5.5:<filename>)
-		git_cmd("git show ".$log->get_head_tag("Range-stop").":".$u." | ".
+		$git->cmd("git show ".$log->get_head_tag("Range-stop").":".$u." | ".
 			"dd of=".$work_dir."/".$solution_name." 2> /dev/null", $output, $status);
 
 		// Add the entire path to modified files
@@ -439,17 +442,17 @@ function cmd_apply($argv)
 	$patches = Patch::get_patches($work_dir);
 	$num_patches = count($patches);
 	$next_commit = $log->get_next();
-	$i = find_commit_index($next_commit, $patches);
+	$i = $git->find_commit_index($next_commit, $patches);
 
 	// We are resuming the apply!
 	if ($i > 0) {
 		$p = Patch::get_by_commit($next_commit, $patches);
 		info("Resuming at (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 
-		$unmerged = get_unmerged_paths();
+		$unmerged = $git->get_unmerged_paths();
 		if (count($unmerged) > 0) {
 			error("Repository contains unmerged paths. Solve conflict before continuing.");
-			launch_editor($unmerged, $p, $log);
+			launch_editor($unmerged, $p, $log, $git);
 			exit(1);
 		}
 
@@ -467,22 +470,22 @@ function cmd_apply($argv)
 		// Check that none of the modified paths still contain conflicts
 		$fatal = FALSE;
 		foreach ($modified as $m) {
-			git_cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
+			$git->cmd("grep -Hn \"<<<<<<<\" ".$m, $res);
 			if (count($res) > 0)
 				$fatal = TRUE;
-			git_cmd("grep -Hn \"=======\" ".$m, $res);
+			$git->cmd("grep -Hn \"=======\" ".$m, $res);
 			if (count($res) > 0)
 				$fatal = TRUE;
-			git_cmd("grep -Hn \">>>>>>>\" ".$m, $res);
+			$git->cmd("grep -Hn \">>>>>>>\" ".$m, $res);
 			if (count($res) > 0)
 				$fatal = TRUE;
 		}
 		if ($fatal)
 			fatal("Modified files still contain unfixed conflicts:\n".array_to_str($res));
 
-		git_cmd("git am --continue");
+		$git->cmd("git am --continue");
 
-		$backport_id = get_current_commit_id();
+		$backport_id = $git->get_current_commit_id();
 
 		$log->update_commit($p->commit_id, $backport_id);
 		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
@@ -495,7 +498,7 @@ function cmd_apply($argv)
 		$p = $patches[$i];
 		$filename = $p->filename;
 		$output_am = "";
-		git_cmd("git am --3way ".$filename." 2> /dev/stdout", $output_am, $status);
+		$git->cmd("git am --3way ".$filename." 2> /dev/stdout", $output_am, $status);
 
 		if ($status != 0) {
 			// Save git am output to file so we can show it in edit (vim, emacs, etc.)
@@ -504,7 +507,7 @@ function cmd_apply($argv)
 			// Check if patch is already cherry picked
 			$range_start = $log->get_head_tag("range-start");
 			$res = NULL;
-			git_cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
+			$git->cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
 			     "..".$range_start." -n1 --oneline --grep=\"cherry picked from commit ".
 			     $p->commit_id."\"", $res);
 
@@ -520,7 +523,7 @@ function cmd_apply($argv)
 
 			delimiter();
 			echo "Unmerged paths:\n";
-			$unmerged = get_unmerged_paths();
+			$unmerged = $git->get_unmerged_paths();
 			error(array_to_str($unmerged));
 
 			delimiter();
@@ -537,7 +540,7 @@ function cmd_apply($argv)
 
 		// Patch might not have introduced changes thus did not get applied (not needed)
 		$old_id = isset($backport_id) ? $backport_id : "";
-		$backport_id = get_current_commit_id();
+		$backport_id = $git->get_current_commit_id();
 
 		if ($old_id == $backport_id) {
 			info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
@@ -548,7 +551,7 @@ function cmd_apply($argv)
 		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 	
 /*
-		git_cmd("make -j16 M=drivers/gpu/drm", $res, $status);
+		$git->cmd("make -j16 M=drivers/gpu/drm", $res, $status);
 		if ($status != 0)
 			fatal("Compilation failed!");
 */
