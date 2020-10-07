@@ -236,7 +236,7 @@ class GitRepo {
 		exec("cd ".$this->dir." && ".$cmd, $output, $status);
 	}
 
-	public function get_current_branch_name() {
+	public function get_current_branch() {
 		$this->cmd("git branch --show-current", $name);
 
 		return $name[0];
@@ -292,14 +292,14 @@ class GitRepo {
 	{
 		$range_start = $log->get_head_tag("range-start");
 
-		if (get_current_branch_name() != $branch) {
+		if ($this->get_current_branch() != $branch) {
 			git_cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
 			if ($status != 0)
 				git_cmd("git checkout -b ".$branch." ".$range_start);
 		}
 
 		// Sanity check the branch
-		if (get_current_branch_name() != $branch)
+		if (get_current_branch() != $branch)
 			fatal("Couldn't create/find correct branch");
 	}
 
