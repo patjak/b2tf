@@ -6,7 +6,7 @@ define("DEBUG", true);
 // How long back in commit history we check for cherry picks
 define("CHERRY_PICK_HISTORY", 4000);
 
-$program_name = basename($argv[0]);
+$progname = basename($argv[0]);
 
 function fatal($msg)
 {
@@ -329,7 +329,7 @@ function cmd_export($argv, $opts)
 	$git->set_dir($git_dir);
 
 	// Execute git format-patch
-	echo "Extracting patches...";
+	echo "Exporting patches...";
 
 	$git->cmd("git format-patch --topo-order --keep-subject --no-merges -o ".
 		 $work_dir." ".$start."..".$stop." ".$paths);
@@ -670,14 +670,28 @@ parse_options($argv);
 
 ?>
 
-Usage: <?= $program_name ?> <command> <options> <arguments>
+Usage: <?= $progname ?> <options> <command>
 
 Important! LINUX_GIT must point to a linux git repository.
 
 Commands:
-	export <range-start> <range-stop> <work-dir> [paths]
-	apply <work-dir> <branch-name>
-	skip <work-dir> <branch-name>
+  setup
+    --start=<range-start>
+    --stop=<range-stop>
+    --branch=<name-of-branch-to-do-backport-in>
+    --work-dir=<working-directory>
+    --git-dir=<git-repository-directory>
+    --paths=<paths-in-git-repo-to-backport>
+    Example:
+    <?= $progname ?> \
+      --start=v5.4 --stop=v5.5 --branch=my-backport \
+      --work-dir=./empty-dir --git-dir=./linux-git \
+      --paths="include/drm/ drivers/gpu/drm/" \
+      setup
+
+  export <range-start> <range-stop> <work-dir> [paths]
+  apply <work-dir> <branch-name>
+  skip <work-dir> <branch-name>
 
 Examples:
 	Create series of patches (git format-patch)
