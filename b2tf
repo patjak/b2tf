@@ -52,6 +52,7 @@ class Patch {
 
 	// Get the contents of a tag and store in $var
 	private function get_tag($line, $tag, &$var) {
+		$line = trim($line);
 		if (substr($line, 0, strlen($tag)) === $tag) {
 			$tag = substr($line, strlen($tag));
 
@@ -68,9 +69,20 @@ class Patch {
 		$file = file_get_contents($filename);
 		$file = explode("---".PHP_EOL, $file);
 		$head = $file[0];
-		$body = $file[1];
 
 		$head = explode(PHP_EOL, $head);
+
+		// Patch format and git format are different
+		if (isset($file[1])) {
+			// Patch format
+			$body = $file[1];
+		} else {
+			// Git format
+			$body = "";
+
+			// Special case for the subject
+			$this->subject = trim($head[4]);
+		}
 
 		// First line is always commit id
 		$commit_id = array_shift($head);
@@ -89,6 +101,16 @@ class Patch {
 		}
 
 		$this->cherry_pick = substr($this->cherry_pick, 0, -1);
+	}
+
+	public function parse_from_git($commit_id, $git) {
+		$filename = "/tmp/tmp-patch.tmp";
+
+		$git->cmd("git log -n1 ".$commit_id, $output);
+		$output = implode(PHP_EOL, $output);
+		file_put_contents($filename, $output);
+		$this->parse($filename);
+		unlink($filename);
 	}
 
 	public static function get_by_commit($commit, $patches)
@@ -200,6 +222,28 @@ class Log {
 		$body = implode(PHP_EOL, $body);
 		$this->set_body($body);
 		$this->save();
+	}
+
+	// Return the last applied commit from log as array
+	function get_last_commit()
+	{
+		$body = $this->get_body();
+		$body = explode(PHP_EOL, $body);
+
+		$prev_line = "";
+		foreach ($body as $line) {
+			if ($line == "")
+				continue;
+			$line = explode(" ", $line);
+			if ($line[0] == "#")
+				continue;
+			if (count($line) == 1)
+				return $prev_line;
+			if ($line[1] == "")
+				return $prev_line;
+
+			$prev_line = $line;
+		}
 	}
 
 	// Find the next patch to process from the commit log
@@ -487,6 +531,15 @@ function cmd_apply($argv)
 	$num_patches = count($patches);
 	$next_commit = $log->get_next_commit();
 	$i = $git->find_commit_index($next_commit, $patches);
+
+	// Sanity check log vs git-repo
+	$p1 = new Patch(); // Upstream commit
+	$p2 = new Patch(); // Backport commit
+	$last = $log->get_last_commit();
+	$p1->parse_from_git($last[0], $git);
+	$p2->parse_from_git($last[1], $git);
+	if ($p1->subject != $p2->subject)
+		fatal("Commit log is corrupted. Fix manually.");
 
 	// We are resuming the apply!
 	if ($i > 0) {
