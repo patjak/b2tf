@@ -406,7 +406,7 @@ function launch_editor($unmerged, $p, $log)
 			"dd of=".$work_dir."/".$solution_name." 2> /dev/null", $output, $status);
 
 		// Add the entire path to modified files
-		$u = $linux_git."/".$u;
+		$u = $git_dir."/".$u;
 
 		// Open vim with all the relevant files
 		passthru("vim -O ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
@@ -427,15 +427,14 @@ function cmd_apply($argv)
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
 
-	if (isset($argv[3]))
-		$branch_name = $argv[3];
-	else
-		fatal("No name branch specified");
-
-	$linux_git = get_linux_git();
+	$branch = $log->get_head_tag("branch");
+	$git_dir = $log->get_head_tag("git-repo");
 	$range_start = $log->get_head_tag("range-start");
 
-	change_branch($branch_name, $log);
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$git->change_branch($branch, $log);
 
 	$patches = Patch::get_patches($work_dir);
 	$num_patches = count($patches);
