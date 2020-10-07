@@ -542,6 +542,11 @@ function cmd_apply($argv)
 			info("(IMPORTANT! Do not run: git am --continue)");
 
 			launch_editor($unmerged, $p, $log, $git);
+
+			// If all conflicts are fixed we automatically add them
+			if (!$git->check_for_conflicts())
+				cmd_add($argv);
+
 			exit();
 		}
 
