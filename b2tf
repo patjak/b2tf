@@ -329,13 +329,13 @@ class GitRepo {
 		$conflicts = FALSE;
 
 		foreach ($unmerged as $u) {
-			$this->cmd("grep -Hn \"<<<<<<<\" ".$u, $res);
+			$this->cmd("grep -Hn \"<<<<<<\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
-			$this->cmd("grep -Hn \"=======\" ".$u, $res);
+			$this->cmd("grep -Hn \"======\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
-			$this->cmd("grep -Hn \">>>>>>>\" ".$u, $res);
+			$this->cmd("grep -Hn \">>>>>>\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
 		}
@@ -426,13 +426,16 @@ function launch_editor($unmerged, $p, $log, $git)
 
 		// Find line number for first conflict
 		$res = "";
-		$git->cmd("grep -n \"<<<<<<<\" ".$u, $res);
-		$res = explode(":", $res[0]);
-		$line_no = $res[0];
+		$git->cmd("grep -n \"<<<<<<\" ".$u, $res);
+		if (count($res) > 0) {
+			$res = explode(":", $res[0]);
+			$line_no = " +".$res[0];
+		} else {
+			$line_no = "";
+		}
 
 		// Open vim with all the relevant files
-		info("Executing: vim -O +".$line_no." ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
-		passthru("vim -O +".$line_no." ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
+		passthru("vim -O ".$line_no." ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
 
 		exec("rm ".$work_dir."/".$solution_name);
 	}
@@ -473,6 +476,13 @@ function cmd_apply($argv)
 		if (count($unmerged) > 0) {
 			error("Repository contains unmerged paths. Solve conflict before continuing.");
 			launch_editor($unmerged, $p, $log, $git);
+
+			// If all conflicts are fixed we automatically add them
+			if ($git->check_for_conflicts() == FALSE)
+				cmd_add($argv);
+			else
+				error("Unmerged paths still contain conflicts");
+
 			exit(1);
 		}
 
@@ -543,8 +553,10 @@ function cmd_apply($argv)
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE)
 				cmd_add($argv);
+			else
+				error("Unmerged paths still contain conflicts");
 
-			exit();
+			exit(1);
 		}
 
 		// Patch might not have introduced changes thus did not get applied (not needed)
