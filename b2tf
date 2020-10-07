@@ -419,10 +419,10 @@ function cmd_apply($argv)
 {
 	global $progname;
 
-	if (isset($argv[2]))
-		$work_dir = realpath($argv[2]);
-	else
-		fatal("No patch directory specified");
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
