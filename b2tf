@@ -222,8 +222,6 @@ class Log {
 			if (!isset($line[1]))
 				return $line[0];
 		}
-
-		error("Couldn't find next commit to process");
 	}
 }
 
