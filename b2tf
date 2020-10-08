@@ -557,21 +557,24 @@ function cmd_apply($argv, $opts)
 	$next_commit = $log->get_next_commit();
 	$i = $git->find_commit_index($next_commit, $patches);
 
-	// Sanity check log vs git-repo
-	$last = $log->get_last_commit();
-	if ($last[1] != "skipped") {
-		$p1 = new Patch(); // Upstream commit
-		$p2 = new Patch(); // Backport commit
-		$p1->parse_from_git($last[0], $git);
-		$p2->parse_from_git($last[1], $git);
-		if ($p1->subject != $p2->subject) {
-			fatal("Commit log is corrupted. Must be fixed manually.\n(".
-			      $p1->subject." != ".$p2->subject.")");
-		}
-	}
+	if ($num_patches == 0)
+		fatal("No patches to apply. Did you forget to run export?");
 
 	// We are resuming the apply!
 	if ($i > 0) {
+		// Sanity check log vs git-repo
+		$last = $log->get_last_commit();
+		if ($last[1] != "skipped") {
+			$p1 = new Patch(); // Upstream commit
+			$p2 = new Patch(); // Backport commit
+			$p1->parse_from_git($last[0], $git);
+			$p2->parse_from_git($last[1], $git);
+			if ($p1->subject != $p2->subject) {
+				fatal("Commit log is corrupted. Must be fixed manually.\n(".
+				      $p1->subject." != ".$p2->subject.")");
+			}
+		}
+
 		$p = Patch::get_by_commit($next_commit, $patches);
 		info("Resuming at (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 
