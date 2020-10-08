@@ -113,8 +113,7 @@ class Patch {
 		unlink($filename);
 	}
 
-	public static function get_by_commit($commit, $patches)
-	{
+	public static function get_by_commit($commit, $patches) {
 		foreach($patches as $p) {
 			if ($p->commit_id == $commit)
 				return $p;
@@ -123,8 +122,7 @@ class Patch {
 		return FALSE;
 	}
 
-	public static function get_patches($work_dir)
-	{
+	public static function get_patches($work_dir) {
 		$files = get_patch_filenames($work_dir);
 		$patches = array();
 		foreach ($files as $file) {
@@ -134,6 +132,15 @@ class Patch {
 		}
 
 		return $patches;
+	}
+
+	public static function get_next_in_log($log, $work_dir)
+	{
+		$patches = Patch::get_patches($work_dir);
+		$next = $log->get_next_commit();
+		$p = Patch::get_by_commit($next, $patches);
+
+		return $p;
 	}
 }
 
@@ -533,13 +540,17 @@ function cmd_apply($argv)
 	$i = $git->find_commit_index($next_commit, $patches);
 
 	// Sanity check log vs git-repo
-	$p1 = new Patch(); // Upstream commit
-	$p2 = new Patch(); // Backport commit
 	$last = $log->get_last_commit();
-	$p1->parse_from_git($last[0], $git);
-	$p2->parse_from_git($last[1], $git);
-	if ($p1->subject != $p2->subject)
-		fatal("Commit log is corrupted. Fix manually.");
+	if ($last[1] != "skipped") {
+		$p1 = new Patch(); // Upstream commit
+		$p2 = new Patch(); // Backport commit
+		$p1->parse_from_git($last[0], $git);
+		$p2->parse_from_git($last[1], $git);
+		if ($p1->subject != $p2->subject) {
+			fatal("Commit log is corrupted. Must be fixed manually.\n(".
+			      $p1->subject." != ".$p2->subject.")");
+		}
+	}
 
 	// We are resuming the apply!
 	if ($i > 0) {
@@ -608,8 +619,8 @@ function cmd_apply($argv)
 				continue;
 			}
 
-			delimiter();
-			echo array_to_str($output_am);
+			// delimiter();
+			// echo array_to_str($output_am);
 
 			delimiter();
 			echo "Unmerged paths:\n";
@@ -647,33 +658,13 @@ function cmd_apply($argv)
 		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 	
 /*
-		$git->cmd("make -j16 M=drivers/gpu/drm", $res, $status);
+		$git->cmd("make -j16 M=drivers/gpu/drm 2> /dev/null", $res, $status);
 		if ($status != 0)
-			fatal("Compilation failed!");
+			error("Compilation failed!");
 */
 	}
 
 	exit();
-}
-
-function cmd_skip($argv)
-{
-	if (isset($argv[2]))
-		$work_dir = realpath($argv[2]);
-	else
-		fatal("No patch directory specified");
-
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
-
-	if (isset($argv[3]))
-		$branch_name = $argv[3];
-	else
-		fatal("No name branch specified");
-
-	change_branch($branch_name);
-
-	$i = find_next_patch_index($work_dir, $log);
 }
 
 function cmd_setup($argv, $opts)
@@ -787,6 +778,96 @@ function cmd_reset($argv)
 	exit(0);
 }
 
+function cmd_skip($argv)
+{
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$modified = $git->get_modified_paths();
+	if (count($modified) > 0)
+		fatal("You have modified paths. Cannot skip!");
+
+	$git->cmd("git am --abort");
+
+	$num_patches = count(Patch::get_patches($work_dir));
+	$p = Patch::get_next_in_log($log, $work_dir);
+	info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+	$git->skip_commit($log, $p);
+
+	cmd_apply($argv);
+}
+
+function cmd_sanity_check($argv)
+{
+	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
+	$work_dir = realpath($work_dir);
+
+	if ($work_dir == "")
+		fatal("Missing --work-dir <arg>");
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$body = $log->get_body();
+	$body = explode(PHP_EOL, $body);
+
+	$i = 0;
+	foreach ($body as $line) {
+		$i++;
+		$l = explode(" ", $line);
+		if ($line == "")
+			continue;
+		if ($line[0] == "")
+			continue;
+		if ($line[0][0] == "#")
+			continue;
+		if ($line[1] == "")
+			continue;
+		if (strlen($line[1]) != 40) {
+			info("strlen: ".strlen($line[1]));
+			continue;
+		}
+		var_dump($line);
+
+		$p1 = new Patch(); // Upstream commit
+		$p2 = new Patch(); // Backport commit
+		$p1->parse_from_git($line[0], $git);
+		$p2->parse_from_git($line[1], $git);
+		info("\"".$p1->subject."\" == \"".$p2->subject."\"");
+
+		if ($p1->subject != $p2->subject) {
+			fatal("Commit log is corrupted at commit: ".$i."\n".
+			      "(".$p1->subject." != ".$p2->subject.")");
+		}
+	}
+
+	info("Check completed successfully");
+}
+
 function parse_options($argv)
 {
 	$opts = array(
@@ -809,22 +890,25 @@ function parse_options($argv)
 	switch($command) {
 	case "setup":
 		cmd_setup($argv, $options);
-		break;
+		exit(0);
 	case "export":
 		cmd_export($argv, $options);
-		break;
+		exit(0);
 	case "apply":
 		cmd_apply($argv);
-		break;
+		exit(0);
 	case "skip":
 		cmd_skip($argv);
-		break;
+		exit(0);
 	case "add":
 		cmd_add($argv);
-		break;
+		exit(0);
 	case "reset":
 		cmd_reset($argv);
-		break;
+		exit(0);
+	case "sanity-check":
+		cmd_sanity_check($argv);
+		exit(0);
 	}
 }
 
@@ -852,8 +936,8 @@ Commands:
       setup
 
   export <range-start> <range-stop> <work-dir> [paths]
-  apply <work-dir> <branch-name>
-  skip <work-dir> <branch-name>
+  apply <work-dir>
+  skip <work-dir>
 
 Examples:
 	Create series of patches (git format-patch)
