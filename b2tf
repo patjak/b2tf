@@ -518,6 +518,22 @@ function cmd_export($argv, $opts)
 	exit();
 }
 
+function check_for_cherry_pick($log, $p)
+{
+	// Check if patch is already cherry picked
+	$range_start = $log->get_head_tag("range-start");
+	$git->cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
+	     "..".$range_start." -n1 --oneline --grep=\"cherry picked from commit ".
+	     $p->commit_id."\"", $res);
+
+	if (count($res) > 0) {
+		info("Patch found in preceding cheery pick (".$res[0].")");
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
 function cmd_apply($argv, $opts)
 {
 	global $progname;
@@ -607,22 +623,11 @@ function cmd_apply($argv, $opts)
 			// Save git am output to file so we can show it in edit (vim, emacs, etc.)
 			file_put_contents($workdir."/output.tmp", array_to_str($output_am));
 
-			// Check if patch is already cherry picked
-			$range_start = $log->get_head_tag("range-start");
-			$res = NULL;
-			$git->cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
-			     "..".$range_start." -n1 --oneline --grep=\"cherry picked from commit ".
-			     $p->commit_id."\"", $res);
-
-			if (count($res) > 0) {
-				info("Patch found in preceding cheery pick (".$res[0].")");
+			if (check_for_cherry_pick($log, $p)) {
 				info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 				$git->skip_commit($log, $p);
 				continue;
 			}
-
-			// delimiter();
-			// echo array_to_str($output_am);
 
 			delimiter();
 			echo "Unmerged paths:\n";
