@@ -594,17 +594,6 @@ function cmd_apply($argv, $opts)
 			exit(1);
 		}
 
-		// Check for empty patch that needs skipping
-		/*
-		$modified = get_modified_paths();
-		if (count($modified) == 0) {
-			info("No changes where made. Skipping patch.");
-			info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
-			$log->update_commit($p->commit_id, "skipped");
-			$git->skip_commit($log, $p);
-		}
-		*/
-
 		$git->cmd("git am --continue");
 
 		$backport_id = $git->get_current_commit_id();
