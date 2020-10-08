@@ -434,46 +434,13 @@ function get_patch_filenames($dir)
 	return $files;
 }
 
-function cmd_export($argv, $opts)
+function get_opt($name, $opts)
 {
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
+	$opt = isset($opts[$name]) ? $opts[$name] : "";
+	if ($opt == "")
+		fatal("Missing --".$opt." <arg>");
 
-
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
-
-	$start = $log->get_head_tag("range-start");
-	$stop = $log->get_head_tag("range-stop");
-	$git_dir = $log->get_head_tag("git-dir");
-	$paths = $log->get_head_tag("paths");
-
-	$git = new GitRepo();
-	$git->set_dir($git_dir);
-
-	// Execute git format-patch
-	echo "Exporting patches...";
-
-	$git->cmd("git format-patch --topo-order --keep-subject --no-merges -o ".
-		 $work_dir." ".$start."..".$stop." ".$paths);
-
-	$log->set_body("#         <Upstream commit id>".
-		       "                   <Backported commit id>\n");
-	$files = get_patch_filenames($work_dir);
-	$patches = array();
-	foreach ($files as $file) {
-		$p = new Patch();
-		$p->parse($file);
-		$patches[] = $p;
-		$log->append_body($p->commit_id."\n");
-	}
-
-	$log->save($work_dir."/commits.log");
-
-	echo count($files)."\n";
-	exit();
+	return $opt;
 }
 
 function launch_editor($unmerged, $p, $log, $git)
@@ -513,14 +480,49 @@ function launch_editor($unmerged, $p, $log, $git)
 	}
 }
 
-function cmd_apply($argv)
+function cmd_export($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$start = $log->get_head_tag("range-start");
+	$stop = $log->get_head_tag("range-stop");
+	$git_dir = $log->get_head_tag("git-dir");
+	$paths = $log->get_head_tag("paths");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	// Execute git format-patch
+	echo "Exporting patches...";
+
+	$git->cmd("git format-patch --topo-order --keep-subject --no-merges -o ".
+		 $work_dir." ".$start."..".$stop." ".$paths);
+
+	$log->set_body("#         <Upstream commit id>".
+		       "                   <Backported commit id>\n");
+	$files = get_patch_filenames($work_dir);
+	$patches = array();
+	foreach ($files as $file) {
+		$p = new Patch();
+		$p->parse($file);
+		$patches[] = $p;
+		$log->append_body($p->commit_id."\n");
+	}
+
+	$log->save($work_dir."/commits.log");
+
+	echo count($files)."\n";
+	exit();
+}
+
+function cmd_apply($argv, $opts)
 {
 	global $progname;
 
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
+	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -566,7 +568,7 @@ function cmd_apply($argv)
 
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE)
-				cmd_add($argv);
+				cmd_add($argv, $opts);
 			else
 				error("Unmerged paths still contain conflicts");
 
@@ -669,32 +671,12 @@ function cmd_apply($argv)
 
 function cmd_setup($argv, $opts)
 {
-	$range_start = isset($opts['start']) ? $opts['start'] : "";
-	if ($range_start == "")
-		fatal("Missing --start <arg>");
-
-	$range_stop = isset($opts['stop']) ? $opts['stop'] : "";
-	if ($range_stop == "")
-		fatal("Missing --stop <arg>");
-
-	$branch = isset($opts['branch']) ? $opts['branch'] : "";
-	if ($branch == "")
-		fatal("Missing --branch <arg>");
-
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
-
-	$git_dir = isset($opts['git-dir']) ? $opts['git-dir'] : "";
-	$git_dir = realpath($git_dir);
-	if ($git_dir == "")
-		fatal("Missing --git-dir <arg>");
-
-	$paths = isset($opts['paths']) ? $opts['paths'] : "";
-	if ($paths == "")
-		fatal("Missing --paths <args>");
+	$work_dir = realpath(get_opt("work-dir", $opts));
+	$branch = get_opt("branch", $opts);
+	$range_start = get_opt("start", $opts);
+	$range_stop = get_opt("stop", $opts);
+	$git_dir = realpath(get_opt("git-dir", $opts));
+	$paths = get_opt("paths", $opts);
 
 	$log = new Log();
 	$log->append_head("Range-start: ".$range_start."\n");
@@ -710,13 +692,9 @@ function cmd_setup($argv, $opts)
 	exit(0);
 }
 
-function cmd_add($argv)
+function cmd_add($argv, $opts)
 {
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
+	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -748,13 +726,9 @@ function cmd_add($argv)
 	exit(0);
 }
 
-function cmd_reset($argv)
+function cmd_reset($argv, $opts)
 {
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
+	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -778,13 +752,9 @@ function cmd_reset($argv)
 	exit(0);
 }
 
-function cmd_skip($argv)
+function cmd_skip($argv, $opts)
 {
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
+	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -812,13 +782,9 @@ function cmd_skip($argv)
 	cmd_apply($argv);
 }
 
-function cmd_sanity_check($argv)
+function cmd_sanity_check($argv, $opts)
 {
-	$work_dir = isset($opts['work-dir']) ? $opts['work-dir'] : "";
-	$work_dir = realpath($work_dir);
-
-	if ($work_dir == "")
-		fatal("Missing --work-dir <arg>");
+	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -895,19 +861,22 @@ function parse_options($argv)
 		cmd_export($argv, $options);
 		exit(0);
 	case "apply":
-		cmd_apply($argv);
+		cmd_apply($argv, $options);
 		exit(0);
 	case "skip":
-		cmd_skip($argv);
+		cmd_skip($argv, $options);
 		exit(0);
 	case "add":
-		cmd_add($argv);
+		cmd_add($argv, $options);
 		exit(0);
 	case "reset":
-		cmd_reset($argv);
+		cmd_reset($argv, $options);
 		exit(0);
 	case "sanity-check":
-		cmd_sanity_check($argv);
+		cmd_sanity_check($argv, $options);
+		exit(0);
+	case "diff":
+		cmd_diff($argv, $options);
 		exit(0);
 	}
 }
