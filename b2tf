@@ -802,9 +802,10 @@ function cmd_sanity_check($argv, $opts)
 	$body = explode(PHP_EOL, $body);
 
 	$i = 0;
+	$num_faults = 0;
 	foreach ($body as $line) {
 		$i++;
-		$l = explode(" ", $line);
+		$line = explode(" ", $line);
 		if ($line == "")
 			continue;
 		if ($line[0] == "")
@@ -813,25 +814,41 @@ function cmd_sanity_check($argv, $opts)
 			continue;
 		if ($line[1] == "")
 			continue;
-		if (strlen($line[1]) != 40) {
-			info("strlen: ".strlen($line[1]));
+		if (strlen($line[1]) != 40)
 			continue;
-		}
-		var_dump($line);
 
 		$p1 = new Patch(); // Upstream commit
 		$p2 = new Patch(); // Backport commit
 		$p1->parse_from_git($line[0], $git);
 		$p2->parse_from_git($line[1], $git);
-		info("\"".$p1->subject."\" == \"".$p2->subject."\"");
+		// info("\"".$p1->subject."\" == \"".$p2->subject."\"");
 
 		if ($p1->subject != $p2->subject) {
-			fatal("Commit log is corrupted at commit: ".$i."\n".
-			      "(".$p1->subject." != ".$p2->subject.")");
+			error("Commit log is inconsistent at commit: ".$i);
+			echo "\t".$p1->commit_id." ".$p1->subject."\n".
+			     "\t".$p2->commit_id." ".$p2->subject."\n";
+			$num_faults++;
 		}
 	}
 
-	info("Check completed successfully");
+	info("Found ".$num_faults." inconsitencies");
+}
+
+function cmd_diff($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
 }
 
 function parse_options($argv)
