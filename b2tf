@@ -322,14 +322,14 @@ class GitRepo {
 		return $git_head[0];
 	}
 
-	public function get_unmerged_paths() {
+	private function parse_status_paths($str, $line_skip) {
 		$this->cmd("git status", $output);
 
-		while (count($output) > 0 && $output[0] != "Unmerged paths:")
+		while (count($output) > 0 && $output[0] != $str)
 			array_shift($output);
 
 		// Parse the modified files from output
-		$output = array_splice($output, 3);
+		$output = array_splice($output, $line_skip);
 		$paths = array();
 		foreach ($output as $o) {
 			if ($o == "")
@@ -341,47 +341,19 @@ class GitRepo {
 		return $paths;
 	}
 
+	// Returns an array of unmerged paths
+	public function get_unmerged_paths() {
+		return $this->parse_status_paths("Unmerged paths:", 3);
+	}
+
+	// Returns an array of paths to be commited
 	public function get_modified_paths() {
-		$this->cmd("git status", $output);
-
-		while (count($output) > 0 && $output[0] != "Changes to be committed:")
-			array_shift($output);
-
-		$output = array_splice($output, 2);
-
-		$paths = array();
-		foreach ($output as $o) {
-			$o = trim($o);
-			if ($o == "")
-				break;
-
-			$o = explode(":", $o);
-			$paths[] = trim($o[1]);
-		}
-
-		return $paths;
+		return $this->parse_status_paths("Changes to be committed:", 2);
 	}
 
 	// Returns an array of paths not staged for commit
 	public function get_unstaged_paths() {
-		$this->cmd("git status", $output);
-
-		while (count($output) > 0 && $output[0] != "Changes not staged for commit:")
-			array_shift($output);
-
-		$output = array_splice($output, 2);
-
-		$paths = array();
-		foreach ($output as $o) {
-			$o = trim($o);
-			if ($o == "")
-				break;
-
-			$o = explode(":", $o);
-			$paths[] = trim($o[1]);
-		}
-
-		return $paths;
+		return $this->parse_status_paths("Changes not staged for commit:", 2);
 	}
 
 	// Switch to a different git branch
