@@ -403,10 +403,9 @@ class GitRepo {
 		return $i;
 	}
 
-	public function skip_commit($log, $p)
-	{
+	public function skip_commit($log, $p, $reason) {
 		$this->cmd("git am --skip");
-		$log->update_commit($p->commit_id, "skipped");
+		$log->update_commit($p->commit_id, $reason);
 	}
 
 	public function check_for_conflicts() {
@@ -780,7 +779,10 @@ function cmd_skip($argv, $opts)
 	info("Skipped (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 	$git->skip_commit($log, $p);
 
-	cmd_apply($argv);
+	info("Manual skip (?/".$num_patches.") ".$p->commit_id." ".$p->subject);
+	$log->update_commit($p->commit_id, "manual-skip");
+
+	cmd_apply($argv, $opts);
 }
 
 function cmd_sanity_check($argv, $opts)
