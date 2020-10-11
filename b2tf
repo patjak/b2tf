@@ -283,7 +283,7 @@ class Log {
 	// Sanity check last entry in log
 	function sanity_check_last($git) {
 		// Sanity check log vs git-repo
-		$last = $log->get_last_commit();
+		$last = $this->get_last_commit();
 		if (strlen($last[1]) == 40) {
 			$p1 = new Patch(); // Upstream commit
 			$p2 = new Patch(); // Backport commit
