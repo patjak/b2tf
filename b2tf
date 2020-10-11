@@ -427,6 +427,14 @@ class GitRepo {
 
 		return $conflicts;
 	}
+
+	public function check_am_session() {
+		$this->cmd("git status", $res);
+		if ($res[1] == "You are in the middle of an am session.")
+			return TRUE;
+		else
+			return FALSE;
+	}
 }
 
 function array_to_str($array)
