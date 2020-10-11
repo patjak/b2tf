@@ -373,8 +373,7 @@ class GitRepo {
 		return $paths;
 	}
 
-	public function change_branch($branch, $log)
-	{
+	public function change_branch($branch, $log) {
 		$range_start = $log->get_head_tag("range-start");
 
 		if ($this->get_current_branch() != $branch) {
@@ -388,8 +387,7 @@ class GitRepo {
 			fatal("Couldn't create/find correct branch");
 	}
 
-	public function find_commit_index($commit, $patches)
-	{
+	public function find_commit_index($commit, $patches) {
 		// Find where in the series we currently are
 		$num = count($patches);
 		for ($i = 0; $i < $num; $i++) {
@@ -411,8 +409,7 @@ class GitRepo {
 		$log->update_commit($p->commit_id, "skipped");
 	}
 
-	public function check_for_conflicts()
-	{
+	public function check_for_conflicts() {
 		// Check that none of the unmerged paths still contain conflicts
 		$unmerged = $this->get_unmerged_paths();
 		$conflicts = FALSE;
@@ -615,6 +612,7 @@ function cmd_apply($argv, $opts)
 		$p = $patches[$i];
 		$filename = $p->filename;
 		$output_am = "";
+
 		$git->cmd("git am --3way ".$filename." 2> /dev/stdout", $output_am, $status);
 
 		if ($status != 0) {
