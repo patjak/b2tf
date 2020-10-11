@@ -888,10 +888,26 @@ function cmd_diff($argv, $opts)
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
+	$range_stop = $log->get_head_tag("range-stop");
+	$paths = $log->get_head_tag("paths");
 	$git_dir = $log->get_head_tag("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->cmd("git diff ".$branch." ".$range_stop." ".$paths, $res, $status);
+	if ($status != 0)
+		fatal("Failed to diff");
+
+	echo array_to_str($res);
+	delimiter();
+
+	$res = FALSE;
+	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
+	if ($status != 0)
+		fatal("Failed to diff");
+
+	echo array_to_str($res);
 }
 
 function parse_options($argv)
