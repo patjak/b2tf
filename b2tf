@@ -559,62 +559,64 @@ function cmd_apply($argv, $opts)
 	$git->change_branch($branch, $log);
 
 	$patches = Patch::get_patches($work_dir);
-	$num_patches = count($patches);
-	$next_commit = $log->get_next_commit();
-	$i = $git->find_commit_index($next_commit, $patches);
 
+	$num_patches = count($patches);
 	if ($num_patches == 0)
 		fatal("No patches to apply. Did you forget to run export?");
 
-	// We are resuming the apply!
-	if ($i > 0) {
-		$log->sanity_check_last($git);
+	$log->sanity_check_last($git);
 
-		$p = Patch::get_by_commit($next_commit, $patches);
-		info("Resuming at (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
-
-		$unmerged = $git->get_unmerged_paths();
-		$unstaged = $git->get_unstaged_paths();
-
-		if (count($unmerged) > 0 || count($unstaged) > 0) {
-			error("Repository contains unmerged/unstaged paths. Solve conflict before continuing.");
-			launch_editor($unmerged, $p, $log, $git);
-
-			// If all conflicts are fixed we automatically add them
-			if ($git->check_for_conflicts() == FALSE)
-				cmd_add($argv, $opts);
-			else
-				error("Unmerged paths still contain conflicts");
-
-			exit(1);
-		}
+	$next_commit = $log->get_next_commit();
+	$i = $git->find_commit_index($next_commit, $patches);
+	for (; $i < $num_patches; $i++) {
+		$p = $patches[$i];
 
 		// Check if we're in an am session
 		if ($git->check_am_session()) {
-			$git->cmd("git am --continue");
+			$unmerged = $git->get_unmerged_paths();
+			$unstaged = $git->get_unstaged_paths();
 
-			$backport_id = $git->get_current_commit_id();
+			if (count($unmerged) > 0 || count($unstaged) > 0) {
+				error("Repository contains unmerged/unstaged paths. Solve conflict before continuing.");
+				launch_editor($unmerged, $p, $log, $git);
 
-			$log->update_commit($p->commit_id, $backport_id);
-			green("Applied\t(".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
-			$i++;
+				// If all conflicts are fixed we automatically add them
+				if ($git->check_for_conflicts() == FALSE)
+					cmd_add($argv, $opts);
+				else
+					error("Unmerged paths still contain conflicts");
+
+				exit(1);
+			}
+
+			if (count($git->get_modified_paths()) > 0) {
+				debug("In AM session with modified paths. git am --contine");
+				$git->cmd("git am --continue");
+
+				$last_id = $git->get_current_commit_id();
+				$log->update_commit($p->commit_id, $last_id);
+				green("Applied\t(".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+			} else {
+				debug("In AM session WITHOUT modified paths. git am --skip");
+				$git->cmd("git am --skip");
+				$log->update_commit($p->commit_id, "empty");
+				info("Empty\t(".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+			}
+
+			continue;
 		}
 
-		$backport_id = $git->get_current_commit_id();
-	}
-
-	$workdir = $log->get_head_tag("work-dir");
-
-	for (; $i < $num_patches; $i++) {
-		$p = $patches[$i];
 		$filename = $p->filename;
 		$output_am = "";
 
+		$old_id = $git->get_current_commit_id();
 		$git->cmd("git am --3way ".$filename." 2> /dev/stdout", $output_am, $status);
+		$new_id = $git->get_current_commit_id();
 
+		// Check if patch did not apply
 		if ($status != 0) {
 			// Save git am output to file so we can show it in edit (vim, emacs, etc.)
-			file_put_contents($workdir."/output.tmp", array_to_str($output_am));
+			file_put_contents($work_dir."/output.tmp", array_to_str($output_am));
 
 			$cherry_id = $git->check_for_cherry_pick($log, $p);
 			if ($cherry_id !== FALSE) {
@@ -639,19 +641,18 @@ function cmd_apply($argv, $opts)
 			launch_editor($unmerged, $p, $log, $git);
 
 			// If all conflicts are fixed we automatically add them
-			if ($git->check_for_conflicts() == FALSE)
+			if ($git->check_for_conflicts() == FALSE) {
 				cmd_add($argv, $opts);
-			else
+				exit(0);
+			} else {
 				error("Unmerged paths still contain conflicts");
+			}
 
 			exit(1);
 		}
 
 		// Patch might not have introduced changes thus did not get applied (not needed)
-		$old_id = isset($backport_id) ? $backport_id : "";
-		$backport_id = $git->get_current_commit_id();
-
-		if ($old_id == $backport_id) {
+		if ($old_id == $new_id) {
 			$cherry_id = $git->check_for_cherry_pick($log, $p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
@@ -663,7 +664,7 @@ function cmd_apply($argv, $opts)
 			$log->update_commit($p->commit_id, "empty");
 			continue;
 		}
-		$log->update_commit($p->commit_id, $backport_id);
+		$log->update_commit($p->commit_id, $new_id);
 		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 	
 /*
