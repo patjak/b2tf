@@ -280,6 +280,45 @@ class Log {
 		}
 	}
 
+	public function get_num_commits() {
+		$body = $this->get_body();
+		$body = explode(PHP_EOL, $body);
+
+		$i = 0;
+		foreach ($body as $line) {
+			$line = explode(" ", $line);
+			if ($line[0] == "#")
+				continue;
+			if ($line[0] == "")
+				continue;
+
+			$i++;
+		}
+
+		return $i;
+	}
+
+	public function get_commit_index($commit_id) {
+		$body = $this->get_body();
+		$body = explode(PHP_EOL, $body);
+
+		$i = 1;
+		foreach ($body as $line) {
+			$line = explode(" ", $line);
+			if ($line[0] == "#")
+				continue;
+			if ($line[0] == "")
+				continue;
+
+			if ($commit_id == $line[0])
+				return $i;
+
+			$i++;
+		}
+
+		return FALSE;
+	}
+
 	// Sanity check last entry in log
 	function sanity_check_last($git) {
 		// Sanity check log vs git-repo
@@ -862,6 +901,105 @@ function cmd_sanity_check($argv, $opts)
 		error("Found ".$num_faults." inconsitencies");
 }
 
+function cmd_diffstat($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	// FIXME: Change branch
+
+	$range_stop = $log->get_head_tag("range-stop");
+	$paths = $log->get_head_tag("paths");
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$res = FALSE;
+	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
+	if ($status != 0)
+		fatal("Failed to diff");
+
+	echo array_to_str($res);
+}
+
+function cmd_status($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	// FIXME: Change branch
+
+	$range_stop = $log->get_head_tag("range-stop");
+	$paths = $log->get_head_tag("paths");
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$next_commit = $log->get_next_commit();
+	$next_index = $log->get_commit_index($next_commit);
+	$num_commits = $log->get_num_commits();
+
+	echo "Progress ".(round($next_index / $num_commits, 2))."% (".$next_index."/".$num_commits.")\n";
+
+	$res = FALSE;
+	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
+	if ($status != 0)
+		fatal("Failed to diff");
+
+	$last_line = count($res) - 1;
+	echo trim($res[$last_line])."\n\n";
+
+	$patches = Patch::get_patches($work_dir);
+	$p = Patch::get_by_commit($next_commit, $patches);
+
+	if ($git->check_am_session())
+		echo "In AM session on commit:\n";
+	else
+		echo "Not in AM session. Next commit:\n";
+	echo $p->commit_id." ".$p->subject."\n";
+
+	$unmerged = $git->get_unmerged_paths();
+	$unstaged = $git->get_unstaged_paths();
+	$modified = $git->get_modified_paths();
+
+	if (count($modified) > 0) {
+		echo "Unstaged:\n";
+		foreach ($modified as $m) {
+			green("\t".$m);
+		}
+	}
+
+	if (count($unstaged) > 0) {
+		echo "Unstaged:\n";
+		foreach ($unstaged as $u) {
+			green("\t".$u);
+		}
+	}
+
+	if (count($unmerged) > 0) {
+		echo "Unmerged:\n";
+		foreach ($unmerged as $u) {
+			error("\t".$u);
+		}
+	}
+
+	echo "\n";
+}
+
 function cmd_diff($argv, $opts)
 {
 	$work_dir = realpath(get_opt("work-dir", $opts));
@@ -935,6 +1073,12 @@ function parse_options($argv)
 		exit(0);
 	case "sanity-check":
 		cmd_sanity_check($argv, $options);
+		exit(0);
+	case "status":
+		cmd_status($argv, $options);
+		exit(0);
+	case "diffstat":
+		cmd_diffstat($argv, $options);
 		exit(0);
 	case "diff":
 		cmd_diff($argv, $options);
