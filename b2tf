@@ -869,6 +869,7 @@ function cmd_sanity_check($argv, $opts)
 	$body = explode(PHP_EOL, $body);
 
 	$i = 0;
+	$j = 0;
 	$num_faults = 0;
 	foreach ($body as $line) {
 		$i++;
@@ -879,7 +880,7 @@ function cmd_sanity_check($argv, $opts)
 			continue;
 		if ($line[0][0] == "#")
 			continue;
-		if ($line[1] == "")
+		if (!isset($line[1]) || $line[1] == "")
 			continue;
 		if (strlen($line[1]) != 40) {
 			// If line is a cherry pick, we compare those instead
@@ -905,7 +906,11 @@ function cmd_sanity_check($argv, $opts)
 			     "\t".$p2->commit_id." ".$p2->subject."\n";
 			$num_faults++;
 		}
+
+		$j++;
 	}
+
+	msg("Processed ".$j." commits");
 
 	if ($num_faults == 0)
 		green("Found ".$num_faults." inconsitencies");
