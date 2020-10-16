@@ -966,11 +966,12 @@ function cmd_status($argv, $opts)
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
-	$next_commit = $log->get_next_commit();
-	$next_index = $log->get_commit_index($next_commit);
+	$last_commit = $log->get_last_commit();
+	$last_commit = $last_commit[0];
+	$last_index = $log->get_commit_index($last_commit);
 	$num_commits = $log->get_num_commits();
 
-	echo "Progress ".(round($next_index / $num_commits, 2))."% (".$next_index."/".$num_commits.")\n";
+	echo "Progress ".(round(($last_index / $num_commits) * 100, 0))."% (".$last_index."/".$num_commits." commits)\n";
 
 	$res = FALSE;
 	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
@@ -978,8 +979,15 @@ function cmd_status($argv, $opts)
 		fatal("Failed to diff");
 
 	$last_line = count($res) - 1;
-	echo trim($res[$last_line])."\n\n";
+	msg(trim($res[$last_line])."\n");
 
+
+	if ($last_index == $num_commits) {
+		msg("Backport is done!");
+		return;
+	}
+
+	$next_commit = $log->get_next_commit();
 	$patches = Patch::get_patches($work_dir);
 	$p = Patch::get_by_commit($next_commit, $patches);
 
@@ -994,7 +1002,7 @@ function cmd_status($argv, $opts)
 	$modified = $git->get_modified_paths();
 
 	if (count($modified) > 0) {
-		echo "Unstaged:\n";
+		echo "Modified:\n";
 		foreach ($modified as $m) {
 			green("\t".$m);
 		}
