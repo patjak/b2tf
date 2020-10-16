@@ -408,8 +408,12 @@ class GitRepo {
 	}
 
 	// Switch to a different git branch
-	public function change_branch($branch, $log) {
+	public function change_branch($log) {
 		$range_start = $log->get_head_tag("range-start");
+		$branch = $log->get_head_tag("branch");
+
+		if ($branch == "")
+			fatal("Invalid branch. Did you run setup properly?");
 
 		if ($this->get_current_branch() != $branch) {
 			$this->cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
@@ -607,7 +611,7 @@ function cmd_apply($argv, $opts)
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
-	$git->change_branch($branch, $log);
+	$git->change_branch($log);
 
 	$patches = Patch::get_patches($work_dir);
 
@@ -767,6 +771,8 @@ function cmd_add($argv, $opts)
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
+	$git->change_branch($log);
+
 	$fatal = $git->check_for_conflicts();
 	if ($fatal)
 		fatal("Unmerged paths still contain conflicts!");
@@ -800,6 +806,9 @@ function cmd_reset($argv, $opts)
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
+
 	$git->cmd("git am --abort");
 	$git->cmd("git checkout master");
 	$git->cmd("git branch -D ".$branch);
@@ -826,6 +835,8 @@ function cmd_skip($argv, $opts)
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
 
 	$modified = $git->get_modified_paths();
 	if (count($modified) > 0)
@@ -864,6 +875,8 @@ function cmd_sanity_check($argv, $opts)
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
@@ -929,14 +942,14 @@ function cmd_diffstat($argv, $opts)
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	// FIXME: Change branch
-
 	$range_stop = $log->get_head_tag("range-stop");
 	$paths = $log->get_head_tag("paths");
 	$git_dir = $log->get_head_tag("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
 
 	$res = FALSE;
 	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
@@ -953,18 +966,15 @@ function cmd_status($argv, $opts)
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
 
-	$branch = $log->get_head_tag("branch");
-	if ($branch == "")
-		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
-
-	// FIXME: Change branch
-
 	$range_stop = $log->get_head_tag("range-stop");
 	$paths = $log->get_head_tag("paths");
 	$git_dir = $log->get_head_tag("git-dir");
+	$branch = $log->get_head_tag("branch");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
 
 	$last_commit = $log->get_last_commit();
 	$last_commit = $last_commit[0];
@@ -1042,6 +1052,8 @@ function cmd_diff($argv, $opts)
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
 
 	$git->cmd("git diff ".$branch." ".$range_stop." ".$paths, $res, $status);
 	if ($status != 0)
