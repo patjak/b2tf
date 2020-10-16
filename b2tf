@@ -252,7 +252,7 @@ class Log {
 	}
 
 	// Return the latest applied commit from log as array [upstream_id, backport_id]
-	private function get_last_commit() {
+	public function get_last_commit() {
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
 
@@ -270,6 +270,8 @@ class Log {
 
 			$prev_line = $line;
 		}
+
+		return $prev_line;
 	}
 
 	// Find the next commit id to process from the commit log
