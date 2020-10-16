@@ -152,8 +152,9 @@ class Patch {
 
 class Log {
 	var $filename = FALSE;
-	var $head;
-	var $body;
+	var $head; // Backport setup data
+	var $body; // Commits
+	var $tail; // Postponed commits
 
 	// Load the log from the work directory
 	public function load($filename) {
@@ -165,11 +166,15 @@ class Log {
 		$tmp = explode("---".PHP_EOL, $tmp);
 		$this->head = $tmp[0];
 		$this->body = $tmp[1];
+		if (isset($tmp[2]))
+			$this->tail = $tmp[2];
+		else
+			$this->tail = "";
 	}
 
 	// Save the log to the work directory
 	public function save($filename = FALSE) {
-		$contents  = $this->head."---".PHP_EOL.$this->body;
+		$contents  = $this->head."---".PHP_EOL.$this->body."---".$this->tail;
 		if ($filename === FALSE)
 			$filename = $this->filename;
 		file_put_contents($filename, $contents);
