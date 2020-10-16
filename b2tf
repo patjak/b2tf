@@ -8,6 +8,11 @@ define("CHERRY_PICK_HISTORY", 4000);
 
 $progname = basename($argv[0]);
 
+function msg($msg)
+{
+	echo $msg."\n";
+}
+
 function fatal($msg)
 {
 	echo "\e[31m".$msg."\e[0m\n";
