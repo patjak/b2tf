@@ -1070,6 +1070,29 @@ function cmd_diff($argv, $opts)
 	echo array_to_str($res);
 }
 
+function cmd_postpone($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
+
+	if ($git->check_am_session()) {
+		$git->cmd("git am --abort");
+	}
+
+	$branch = $log->get_head_tag("branch");
+	$git->change_branch();
+
+}
+
 function parse_options($argv)
 {
 	$opts = array(
@@ -1119,6 +1142,9 @@ function parse_options($argv)
 		exit(0);
 	case "diff":
 		cmd_diff($argv, $options);
+		exit(0);
+	case "postpone":
+		cmd_postpone($argv, $options);
 		exit(0);
 	}
 }
