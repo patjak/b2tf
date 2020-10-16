@@ -1117,10 +1117,10 @@ parse_options($argv);
 
 Usage: <?= $progname ?> <options> <command>
 
-Important! LINUX_GIT must point to a linux git repository.
+ALL commands require --work-dir to be specified!
 
 Commands:
-  setup
+  setup - Setup all backporting parameters
     --start=<range-start>
     --stop=<range-stop>
     --branch=<name-of-branch-to-do-backport-in>
@@ -1134,9 +1134,13 @@ Commands:
       --paths="include/drm/ drivers/gpu/drm/" \
       setup
 
-  export <range-start> <range-stop> <work-dir> [paths]
-  apply <work-dir>
-  skip <work-dir>
+  export - Runs git-format-patch over the specified range
+
+  apply - Start re-applying the series
+
+  diff- Show diff between current tree vs target tree
+
+  status- Show current status of backport and git repo
 
 Examples:
 	Create series of patches (git format-patch)
