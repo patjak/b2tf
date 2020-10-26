@@ -517,6 +517,14 @@ class GitRepo {
 
 		return FALSE;
 	}
+
+	public function get_backported_commits($log) {
+		$start = $log->get_head_tag("range-start");
+		$branch = $log->get_head_tag("branch");
+		$this->cmd("git rev-list ".$start."..".$branch, $res);
+
+		return $res;
+	}
 }
 
 function array_to_str($array)
