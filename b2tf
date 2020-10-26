@@ -373,6 +373,15 @@ class GitRepo {
 		return $git_head[0];
 	}
 
+	public static function cmp_commits($a, $b) {
+		$len = min(strlen($a), strlen($b));
+
+		if (strncmp($a, $b, $len) == 0)
+			return TRUE;
+
+		return FALSE;
+	}
+
 	private function parse_status_paths($str, $line_skip) {
 		$this->cmd("git status", $output);
 
@@ -484,9 +493,26 @@ class GitRepo {
 			   $p->commit_id."\"", $res);
 
 		if (count($res) > 0) {
-			info("Patch found in preceding cheery pick (".$res[0].")");
+			info("Found i915 cherry-pick (".$res[0].")");
 			$res = explode(" ", $res[0]);
 			return $res[0];
+		}
+
+		unset($res);
+		$this->cmd("git rev-list --no-merges -n1 --oneline HEAD --grep \"".
+			  addslashes($p->subject)."\"", $res);
+
+		if (count($res) > 0) {
+			$commit_id = explode(" ", $res[0])[0];
+			$res = explode(" ", $res[0]);
+			unset($res[0]);
+			$subject = implode(" ", $res);
+
+			if (!GitRepo::cmp_commits($commit_id, $p->commit_id) &&
+						  $subject == $p->subject) {
+				info("Found cherry-pick (".$commit_id.")");
+				return $commit_id;
+			}
 		}
 
 		return FALSE;
@@ -676,7 +702,7 @@ function cmd_apply($argv, $opts)
 			$cherry_id = $git->check_for_cherry_pick($log, $p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
-				$log->update_commit($p->commit_id, "cherry-pick ".$cherry_id);
+				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
 				$git->cmd("git am --abort");
 				continue;
 			}
@@ -711,7 +737,7 @@ function cmd_apply($argv, $opts)
 			$cherry_id = $git->check_for_cherry_pick($log, $p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
-				$log->update_commit($p->commit_id, "cherry-pick ".$cherry_id);
+				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
 				continue;
 			}
 
@@ -850,7 +876,7 @@ function cmd_skip($argv, $opts)
 	$cherry_id = $git->check_for_cherry_pick($log, $p);
 	if ($cherry_id !== FALSE) {
 		info("Cherry picked (?/".$num_patches.") ".$p->commit_id." ".$p->subject);
-		$log->update_commit($p->commit_id, "cherry-pick ".$cherry_id);
+		$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
 		return;
 	}
 
@@ -871,6 +897,8 @@ function cmd_sanity_check($argv, $opts)
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
+	$range_start = $log->get_head_tag("range-start");
+	$range_stop = $log->get_head_tag("range-stop");
 	$git_dir = $log->get_head_tag("git-dir");
 
 	$git = new GitRepo();
@@ -880,6 +908,8 @@ function cmd_sanity_check($argv, $opts)
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
+
+	$backported = $git->get_backported_commits($log);
 
 	$i = 0;
 	$j = 0;
@@ -897,16 +927,38 @@ function cmd_sanity_check($argv, $opts)
 			continue;
 		if (strlen($line[1]) != 40) {
 			// If line is a cherry pick, we compare those instead
-			if ($line[1] == "cherry-pick") {
+			if ($line[1] == "cherry-picked-by") {
 				$line[1] = $line[2];
-			} else {
+			} else if ($line[1] != "empty") {
 				continue;
 			}
 		}
 
 		$p1 = new Patch(); // Upstream commit
-		$p2 = new Patch(); // Backport commit
 		$p1->parse_from_git($line[0], $git);
+
+		if ($line[1] == "empty") {
+			debug("Processing empty: ". $p1->commit_id." ".$p1->subject);
+			$res = NULL;
+			$git->cmd("git rev-list --no-merges -n1 --oneline HEAD --grep \"".
+				  addslashes($p1->subject)."\"", $res);
+
+			if (count($res) == 0)
+				continue;
+
+			$commit_id = explode(" ", $res[0])[0];
+			$res = explode(" ", $res[0]);
+			unset($res[0]);
+			$subject = implode(" ", $res);
+				
+			if (!GitRepo::cmp_commits($commit_id, $p1->commit_id) &&
+			    $subject == $p1->subject) {
+				info("Found cherry-pick: ".$commit_id." ".$subject);
+			}
+		}
+		continue;
+
+		$p2 = new Patch(); // Backport commit
 		$p2->parse_from_git($line[1], $git);
 		// info("\"".$p1->subject."\" == \"".$p2->subject."\"");
 
