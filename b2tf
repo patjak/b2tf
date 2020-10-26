@@ -1038,10 +1038,10 @@ function cmd_status($argv, $opts)
 
 	$last_commit = $log->get_last_commit();
 	$last_commit = $last_commit[0];
-	$last_index = $log->get_commit_index($last_commit);
+	$last_num = $log->get_commit_index($last_commit) + 1;
 	$num_commits = $log->get_num_commits();
 
-	echo "Progress ".(round(($last_index / $num_commits) * 100, 0))."% (".$last_index."/".$num_commits." commits)\n";
+	echo "Progress ".(round(($last_num / $num_commits) * 100, 0))."% (".$last_num."/".$num_commits." commits)\n";
 
 	$res = FALSE;
 	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
@@ -1052,7 +1052,7 @@ function cmd_status($argv, $opts)
 	msg(trim($res[$last_line])."\n");
 
 
-	if ($last_index == $num_commits) {
+	if ($last_num == $num_commits) {
 		msg("Backport is done!");
 		return;
 	}
