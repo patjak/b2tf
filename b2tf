@@ -335,7 +335,7 @@ class Log {
 	function sanity_check_last($git) {
 		// Sanity check log vs git-repo
 		$last = $this->get_last_commit();
-		if (strlen($last[1]) == 40) {
+		if (isset($last[1]) && strlen($last[1]) == 40) {
 			$p1 = new Patch(); // Upstream commit
 			$p2 = new Patch(); // Backport commit
 			$p1->parse_from_git($last[0], $git);
