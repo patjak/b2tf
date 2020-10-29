@@ -1,8 +1,6 @@
 #!/usr/bin/php
 <?php
 
-define("DEBUG", true);
-
 // How long back in commit history we check for cherry picks
 define("CHERRY_PICK_HISTORY", 4000);
 
@@ -1162,6 +1160,8 @@ function parse_options($argv)
 		"work-dir:",
 		"git-dir:",
 		"paths:",
+		"fix",
+		"debug",
 		);
 
 	$options = getopt("", $opts, $optind);
@@ -1171,6 +1171,10 @@ function parse_options($argv)
 	else
 		return;
 
+	if (isset($options["debug"]))
+		define("DEBUG", TRUE);
+	else
+		define("DEBUG", FALSE);
 
 	switch($command) {
 	case "setup":
