@@ -826,16 +826,12 @@ function cmd_add($argv, $opts)
 	exit(0);
 }
 
-function cmd_reset($argv, $opts)
+function cmd_restart($argv, $opts)
 {
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
-
-	$branch = $log->get_head_tag("branch");
-	if ($branch == "")
-		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
 	$git_dir = $log->get_head_tag("git-dir");
 
@@ -843,16 +839,27 @@ function cmd_reset($argv, $opts)
 	$git->set_dir($git_dir);
 
 	$git->change_branch($log);
+	$branch = $log->get_head_tag("branch");
 
-	$git->cmd("git am --abort");
+	if ($git->check_am_session()) {
+		$git->cmd("git am --abort");
+	}
+
 	$git->cmd("git checkout master");
 	$git->cmd("git branch -D ".$branch);
 
-	$patches = Patch::get_patches($work_dir);
-	foreach ($patches as $p)
-		$log->update_commit($p->commit_id, "");
+	$log->set_body("");
+	$files = get_patch_filenames($work_dir);
+	$patches = array();
+	foreach ($files as $file) {
+		$p = new Patch();
+		$p->parse($file);
+		$patches[] = $p;
+		$log->append_body($p->commit_id."\n");
+	}
 
-	exit(0);
+	$log->save($work_dir."/commits.log");
+
 }
 
 function cmd_skip($argv, $opts)
@@ -1236,8 +1243,8 @@ function parse_options($argv)
 	case "add":
 		cmd_add($argv, $options);
 		exit(0);
-	case "reset":
-		cmd_reset($argv, $options);
+	case "restart":
+		cmd_restart($argv, $options);
 		exit(0);
 	case "sanity-check":
 		cmd_sanity_check($argv, $options);
