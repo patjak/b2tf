@@ -84,9 +84,6 @@ class Patch {
 		} else {
 			// Git format
 			$body = "";
-
-			// Special case for the subject
-			$this->subject = trim($head[4]);
 		}
 
 		// First line is always commit id
@@ -116,6 +113,12 @@ class Patch {
 		$output = implode(PHP_EOL, $output);
 		file_put_contents($filename, $output);
 		$this->parse($filename);
+
+		// We don't get the subject when parsing a git commit so do it manually here
+		$git->cmd("git log --oneline -n1 ".$commit_id, $output);
+		$output = explode(" ", $output[0]);
+		unset($output[0]);
+		$this->subject = implode(" ", $output);
 		unlink($filename);
 	}
 
@@ -973,6 +976,13 @@ function cmd_sanity_check($argv, $opts)
 		$bp_id = $backported[$j];
 		$p3 = new Patch();
 		$p3->parse_from_git($bp_id, $git);
+
+		// HACK: Sometimes there are double spaces in some subjects.
+		// They must be removed before comparing
+
+		$p1->subject = str_replace("  ", " ", $p1->subject);
+		$p2->subject = str_replace("  ", " ", $p2->subject);
+		$p3->subject = str_replace("  ", " ", $p3->subject);
 
 		debug("i=".$i." j=".$j);
 		debug("Upstream\t".$p1->commit_id." ".$p1->subject);
