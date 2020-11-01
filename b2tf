@@ -357,6 +357,7 @@ class GitRepo {
 
 	// Run a shell command in the git repository directory
 	public function cmd($cmd, &$output = FALSE, &$status = FALSE) {
+		// debug("git cmd: ".$cmd);
 		exec("cd ".$this->dir." && ".$cmd, $output, $status);
 	}
 
@@ -421,6 +422,7 @@ class GitRepo {
 	public function change_branch($log) {
 		$range_start = $log->get_head_tag("range-start");
 		$branch = $log->get_head_tag("branch");
+		$branch_point = $log->get_head_tag("branch-point");
 
 		if ($branch == "")
 			fatal("Invalid branch. Did you run setup properly?");
@@ -428,7 +430,7 @@ class GitRepo {
 		if ($this->get_current_branch() != $branch) {
 			$this->cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
 			if ($status != 0)
-				$this->cmd("git checkout -b ".$branch." ".$range_start);
+				$this->cmd("git checkout -b ".$branch." ".$branch_point);
 		}
 
 		// Sanity check the branch
@@ -771,6 +773,7 @@ function cmd_setup($argv, $opts)
 {
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$branch = get_opt("branch", $opts);
+	$branch_point = get_opt("branch-point", $opts);
 	$range_start = get_opt("start", $opts);
 	$range_stop = get_opt("stop", $opts);
 	$git_dir = realpath(get_opt("git-dir", $opts));
@@ -780,7 +783,7 @@ function cmd_setup($argv, $opts)
 	$log->append_head("Range-start: ".$range_start."\n");
 	$log->append_head("Range-stop: ".$range_stop."\n");
 	$log->append_head("Branch: ".$branch."\n");
-	$log->append_head("Work-dir: ".$work_dir."\n");
+	$log->append_head("Branch-point: ".$branch_point."\n");
 	$log->append_head("Git-dir: ".$git_dir."\n");
 	$log->append_head("Paths: ".$paths."\n");
 
@@ -1208,6 +1211,7 @@ function parse_options($argv)
 		"start:",
 		"stop:",
 		"branch:",
+		"branch-point:",
 		"work-dir:",
 		"git-dir:",
 		"paths:",
