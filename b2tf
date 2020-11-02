@@ -134,7 +134,7 @@ class Patch {
 
 	// Return all patches in the work dir as an array
 	public static function get_patches($work_dir) {
-		$files = get_patch_filenames($work_dir);
+		$files = get_patch_filenames($work_dir."/patches");
 		$patches = array();
 		foreach ($files as $file) {
 			$p = new Patch();
@@ -617,7 +617,7 @@ function cmd_export($argv, $opts)
 
 	$log->set_body("#         <Upstream commit id>".
 		       "                   <Backported commit id>\n");
-	$files = get_patch_filenames($work_dir);
+	$files = get_patch_filenames($work_dir."/patches");
 	$patches = array();
 	foreach ($files as $file) {
 		$p = new Patch();
@@ -852,7 +852,7 @@ function cmd_restart($argv, $opts)
 	$git->cmd("git branch -D ".$branch);
 
 	$log->set_body("");
-	$files = get_patch_filenames($work_dir);
+	$files = get_patch_filenames($work_dir."/patches");
 	$patches = array();
 	foreach ($files as $file) {
 		$p = new Patch();
