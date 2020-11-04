@@ -611,7 +611,7 @@ function cmd_export($argv, $opts)
 	echo "Exporting patches...";
 
 	exec("mkdir -p ".$work_dir."/patches/");
-	$git->cmd("git format-patch --topo-order --keep-subject --no-merges -o ".
+	$git->cmd("git format-patch --no-renames --topo-order --keep-subject --no-merges -o ".
 		 $work_dir."/patches/ ".$start."..".$stop." ".$paths);
 
 	$log->set_body("#         <Upstream commit id>".
