@@ -1314,6 +1314,38 @@ function cmd_postpone($argv, $opts)
 
 }
 
+function cmd_log($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
+
+	$body = $log->get_body();
+	$body = explode(PHP_EOL, $body);
+
+	for ($i = 0; $i < count($body); $i++) {
+		$line = explode(" ", $body[$i]);
+		if (strlen($line[0]) == 40 && strlen($line[1]) == 40) {
+			$p = new Patch();
+			$p->parse_from_git($line[0], $git);
+
+			echo $line[0]." ".$p->subject."\n";
+		}
+	}
+}
+
 function parse_options($argv)
 {
 	$opts = array(
@@ -1376,6 +1408,9 @@ function parse_options($argv)
 		exit(0);
 	case "rebase":
 		cmd_rebase($argv, $options);
+		exit(0);
+	case "log":
+		cmd_log($argv, $options);
 		exit(0);
 	}
 }
