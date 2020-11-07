@@ -102,6 +102,8 @@ class Patch {
 			$this->get_tag($line, "(cherry picked from commit ", $this->cherry_pick);
 		}
 
+		$this->subject = str_replace("  ", " ", $this->subject);
+
 		$this->cherry_pick = substr($this->cherry_pick, 0, -1);
 	}
 
@@ -119,6 +121,7 @@ class Patch {
 		$output = explode(" ", $output[0]);
 		unset($output[0]);
 		$this->subject = implode(" ", $output);
+		$this->subject = str_replace("  ", " ", $this->subject);
 		unlink($filename);
 	}
 
@@ -153,6 +156,30 @@ class Patch {
 		$p = Patch::get_by_commit($next, $patches);
 
 		return $p;
+	}
+
+	function get_mainline_tag($git)
+	{
+		$git->cmd("git tag --sort=version:refname --contains ".$this->commit_id, $res);
+
+		if (count($res) > 1) {
+			// Tag version is tricky since eg v5.6 gets sorted before v5.6-rc1
+			// so we must adjust for this with some hackery.
+			if (strpos($res[0], "-rc") === FALSE) {
+				$str = $res[0]."-rc";
+				$len = strlen($str);
+				if (strncmp($res[1], $str, $len) == 0)
+					return $res[1];
+				else
+					return $res[0];
+			} else {
+				return $res[0];
+			}
+		} else if (count($res) == 1) {
+			return $res[0];
+		} else {
+			return FALSE;
+		}
 	}
 }
 
@@ -1346,6 +1373,115 @@ function cmd_log($argv, $opts)
 	}
 }
 
+function suse_format_patch($p1, $p2, $signoff, $refs, $git)
+{
+	$mainline = $p2->get_mainline_tag($git);
+	if ($mainline === FALSE)
+		fatal("Couldn't find mainline tag for ".$p2->commit_id." ".$p2->subject);
+
+	$data = file_get_contents($p1->filename);
+	$data = explode(PHP_EOL, $data);
+
+	$tags = array(	"Git-commit: ".$p2->commit_id,
+			"Patch-mainline: ".$mainline,
+			"References: ".$refs);
+
+	// Find appropriate position for tags
+	for ($i = 0; $i < count($data); $i++) {
+		$str = "Content-Transfer-Encoding: ";
+		if (strncmp($str, $data[$i], strlen($str)) == 0)
+			break;
+	}
+
+	// If above tag is not found, try the subject tag
+	if ($i == count($data)) {
+
+		// Find index for subject tag
+		for ($i = 0; $i < count($data); $i++) {
+			$str = "Subject: ";
+			if (strncmp($str, $data[$i], strlen($str)) == 0)
+				break;
+		}
+	}
+
+	if ($i == count($data))
+		fatal("Couldn't find subject tag in patch");
+
+	array_splice($data, ($i + 1), 0, $tags);
+
+	$data = implode(PHP_EOL, $data);
+
+	$data = explode(PHP_EOL."---".PHP_EOL, $data);
+	$data[0] = $data[0].PHP_EOL."Signed-off-by: ".$signoff;
+	$data = implode(PHP_EOL."---".PHP_EOL, $data);
+
+	file_put_contents($p1->filename, $data);
+}
+
+function cmd_format_suse($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+	$start = get_opt("start", $opts);
+	$stop = get_opt("stop", $opts);
+	$signoff = get_opt("signoff", $opts);
+	$refs = get_opt("refs", $opts);
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	// $start = $log->get_head_tag("range-start");
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
+
+	exec("mkdir -p ".$work_dir."/patches-suse");
+	exec("rm ".$work_dir."/patches-suse/*");
+
+	info("Exporting patches...");
+	$git->cmd("git format-patch -o ".$work_dir."/patches-suse/ --no-renames --keep-subject ".$start."..".$stop);
+
+	$body = $log->get_body();
+	$body = explode(PHP_EOL, $body);
+
+	info("Formatting patches...");
+	$patches = Patch::get_patches($work_dir."/patches-suse");
+	$suse_filenames = "./scripts/git_sort/series_insert.py ";
+	for ($i = 0, $j = 0; $i < count($body); $i++) {
+		$line = explode(" ", $body[$i]);
+		if (strlen($line[0]) == 40 && strlen($line[1]) == 40) {
+			if (!isset($patches[$j]))
+				fatal("More patches in log than in backport!");
+
+			// We get more correct subject lines when parsing from git so do that here
+			$p_file = $patches[$j];
+
+			$p1 = new Patch();
+			$p1->parse_from_git($p_file->commit_id, $git);
+
+			$p2 = new Patch();
+			$p2->parse_from_git($line[0], $git);
+
+			if ($p1->subject != $p2->subject)
+				error("Subject not matching\n".$p1->subject." != ".$p2->subject);
+
+			suse_format_patch($p_file, $p2, $signoff, $refs, $git);
+			msg("(".($j + 1)."/".count($patches).") ".$p2->commit_id." ".$p2->subject);
+
+			$suse_filenames .= "patches.suse/".basename($p_file->filename)." ";
+			$j++;
+		}
+	}
+
+	file_put_contents($work_dir."/patches-suse/suse_sort.sh", $suse_filenames);
+}
+
 function parse_options($argv)
 {
 	$opts = array(
@@ -1356,6 +1492,8 @@ function parse_options($argv)
 		"work-dir:",
 		"git-dir:",
 		"paths:",
+		"signoff:",
+		"refs:",
 		"fix",
 		"debug",
 		);
@@ -1411,6 +1549,9 @@ function parse_options($argv)
 		exit(0);
 	case "log":
 		cmd_log($argv, $options);
+		exit(0);
+	case "format-suse":
+		cmd_format_suse($argv, $options);
 		exit(0);
 	}
 }
