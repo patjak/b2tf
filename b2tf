@@ -1149,19 +1149,18 @@ function cmd_rebase($argv, $opts)
 		}
 
 		if ($p2->commit_id != $bp_id) {
-			error("Found non-matching log vs git repo commit");
 			$num_faults++;
 
 			// Check if rebase must have happened
 			if ($p1->subject == $p2->subject && $p1->subject == $p3->subject) {
 				// Looks like a problem we can fix
-				info("Fixing: Updating rebased commit id: ".$p1->commit_id);
+				info("Rebasing commit id: ".$p1->commit_id);
 				$log->update_commit($p1->commit_id, $p3->commit_id);
 				$num_fixed++;
 			} else {
 				error("Our commit log is out of sync with git log!");
 				if ($fix == TRUE) {
-					error("Cannot continue, aborting FIX session!");
+					error("Cannot continue, aborting rebase session!");
 					return;
 				}
 			}
@@ -1171,11 +1170,6 @@ function cmd_rebase($argv, $opts)
 	}
 
 	msg("Processed ".$j." commits");
-	if ($num_faults == 0)
-		green("Found ".$num_faults." problems");
-	else
-		error("Found ".$num_faults." problems");
-
 	info("Rebased ".$num_fixed." commits");
 }
 
