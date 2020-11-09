@@ -1478,6 +1478,45 @@ function cmd_format_suse($argv, $opts)
 	file_put_contents($work_dir."/patches-suse/suse_sort.sh", $suse_filenames);
 }
 
+function cmd_list_cherry_picks($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	$log = new Log();
+	$log->load($work_dir."/commits.log");
+
+	$branch = $log->get_head_tag("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$git_dir = $log->get_head_tag("git-dir");
+
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	$git->change_branch($log);
+
+	$body = $log->get_body();
+	$body = explode(PHP_EOL, $body);
+	foreach ($body as $line) {
+		$line = explode(" ", $line);
+		if (count($line) < 3)
+			continue;
+		if ($line[1] != "cherry-picked-by")
+			continue;
+
+		$p1 = new Patch();
+		$p1->parse_from_git($line[0], $git);
+		$p2 = new Patch();
+		$p2->parse_from_git($line[2], $git);
+
+		if ($p1->subject != $p2->subject)
+			error("Subjects doesn't match");
+
+		msg($line[0]." # Duplicate of ".$p2->commit_id.": ".$p2->subject);
+	}
+}
+
 function parse_options($argv)
 {
 	$opts = array(
@@ -1548,6 +1587,9 @@ function parse_options($argv)
 		exit(0);
 	case "format-suse":
 		cmd_format_suse($argv, $options);
+		exit(0);
+	case "list-cherry-picks":
+		cmd_list_cherry_picks($argv, $options);
 		exit(0);
 	}
 }
