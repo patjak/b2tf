@@ -384,7 +384,7 @@ class GitRepo {
 
 	// Run a shell command in the git repository directory
 	public function cmd($cmd, &$output = FALSE, &$status = FALSE) {
-		// debug("git cmd: ".$cmd);
+		debug("git cmd: ".$cmd);
 		exec("cd ".$this->dir." && ".$cmd, $output, $status);
 	}
 
