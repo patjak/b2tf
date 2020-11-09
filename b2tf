@@ -391,6 +391,8 @@ class GitRepo {
 	// Returns the currently selected branch
 	public function get_current_branch() {
 		$this->cmd("git branch --show-current", $name);
+		if (count($name) == 0)
+			fatal("Failed to get current branch!");
 
 		return $name[0];
 	}
