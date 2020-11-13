@@ -191,6 +191,11 @@ class Log {
 	public function set_body($body) { $this->body = $body; }
 	public function append_body($str) { $this->body .= $str; }
 
+	public function append_patch($p) {
+		$this->append_body("# ".$p->subject.PHP_EOL);
+		$this->append_body($p->commit_id.PHP_EOL.PHP_EOL);
+	}
+
 	// Get the contents of a tag and store in $var
 	private function get_tag($line, $tag, &$var) {
 		$tag = strtolower($tag);
@@ -622,7 +627,7 @@ function cmd_export($argv, $opts)
 		$p = new Patch();
 		$p->parse($file);
 		$patches[] = $p;
-		$log->append_body($p->commit_id."\n");
+		$log->append_patch($p);
 	}
 
 	$log->save($work_dir."/commits.log");
@@ -857,7 +862,7 @@ function cmd_restart($argv, $opts)
 		$p = new Patch();
 		$p->parse($file);
 		$patches[] = $p;
-		$log->append_body($p->commit_id."\n");
+		$log->append_patch($p);
 	}
 
 	$log->save($work_dir."/commits.log");
