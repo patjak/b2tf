@@ -303,12 +303,8 @@ class Log {
 		$i = 0;
 		foreach ($body as $line) {
 			$line = explode(" ", $line);
-			if ($line[0] == "#")
-				continue;
-			if ($line[0] == "")
-				continue;
-
-			$i++;
+			if (strlen($line[0]) == 40)
+				$i++;
 		}
 
 		return $i;
@@ -318,7 +314,7 @@ class Log {
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
 
-		$i = 1;
+		$i = 0;
 		foreach ($body as $line) {
 			$line = explode(" ", $line);
 			if ($line[0] == "#")
@@ -1212,7 +1208,7 @@ function cmd_status($argv, $opts)
 	msg(trim($res[$last_line])."\n");
 
 
-	if ($last_num == $num_commits) {
+	if ($last_num >= $num_commits) {
 		msg("Backport is done!");
 		return;
 	}
