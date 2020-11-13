@@ -178,7 +178,7 @@ class Log {
 
 	// Save the log to the work directory
 	public function save($filename = FALSE) {
-		$contents  = $this->head."---".PHP_EOL.$this->body."---".$this->tail;
+		$contents  = $this->head."---".PHP_EOL.$this->body."---".PHP_EOL.$this->tail;
 		if ($filename === FALSE)
 			$filename = $this->filename;
 		file_put_contents($filename, $contents);
