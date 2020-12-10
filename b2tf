@@ -4,8 +4,6 @@
 // How long back in commit history we check for cherry picks
 define("CHERRY_PICK_HISTORY", 4000);
 
-$progname = basename($argv[0]);
-
 function msg($msg) { echo $msg."\n"; }
 function fatal($msg) { echo "\e[31m".$msg."\e[0m\n"; exit(1); }
 function error($msg) { echo "\e[31m".$msg."\e[0m\n"; }
@@ -634,8 +632,6 @@ function cmd_export($argv, $opts)
 
 function cmd_apply($argv, $opts)
 {
-	global $progname;
-
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
@@ -1581,7 +1577,7 @@ parse_options($argv);
 
 ?>
 
-Usage: <?= $progname ?> <options> <command>
+Usage: <?= $argv[0] ?> <options> <command>
 
 ALL commands require --work-dir to be specified!
 
@@ -1594,7 +1590,7 @@ Commands:
     --git-dir=<git-repository-directory>
     --paths=<paths-in-git-repo-to-backport>
     Example:
-    <?= $progname ?> \
+    <?= $argv[0] ?> \
       --start=v5.4 --stop=v5.5 --branch=my-backport \
       --work-dir=./empty-dir --git-dir=./linux-git \
       --paths="include/drm/ drivers/gpu/drm/" \
