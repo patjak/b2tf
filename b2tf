@@ -12,18 +12,26 @@ function green($msg) { echo "\e[32m".$msg."\e[0m\n"; }
 function debug($msg) { if (DEBUG) { echo "\e[33m".$msg."\e[0m\n"; } }
 function delimiter() { echo "\e[33m----------\e[0m\n"; }
 
+/**
+ * A representation of a patch file
+ */
 class Patch {
-	var $filename; // Includes the full path
-	var $commit_id; // Hash
-	var $author;
-	var $date;
-	var $subject;
-	var $signatures = array();
-	var $reviews = array();
-	var $cherry_pick;
+	var $filename;			///< Full path to the patch file
+	var $commit_id;			///< The git commit hash
+	var $author;			///< Author of the patch
+	var $date;			///< Patch date
+	var $subject;			///< Patch subject
+	var $signatures = array();	///< Array of signed-off-by tags
+	var $reviews = array();		///< Array of reviewied-by tags
+	var $cherry_pick;		///< Is the patch a cherry pick?
 
-	// Get the contents of a tag and store in $var
-	// $tag is not case sensitive
+	/**
+	 * Get the contents of a tag and store in $var. $tag is not case sensitive
+	 *
+	 * @param $line	The line in the patch file to search (haystack)
+	 * @param $tag	The tag to search for in the line (needle)
+	 * @param $var	Used to return the found tag (if any is found)
+	 */
 	private function get_tag($line, $tag, &$var) {
 		$line = trim($line);
 		if (substr($line, 0, strlen($tag)) === $tag) {
@@ -38,7 +46,11 @@ class Patch {
 		}
 	}
 
-	// Read out all tags from patch file or 'git log' and store in object
+	/**
+	 * Parse contents of patch file and store in Patch object.
+	 *
+	 * @param $filename Full path filename to the patch file
+	 */
 	public function parse($filename) {
 		$file = file_get_contents($filename);
 		$file = explode("---".PHP_EOL, $file);
@@ -76,7 +88,12 @@ class Patch {
 		$this->cherry_pick = substr($this->cherry_pick, 0, -1);
 	}
 
-	// Read out patch header (body not included) from git commit
+	/**
+	 * Read out patch header (body not included) from git commit
+	 *
+	 * @param $commit_id	Hash of commit to process
+	 * @param $git		The GitRepo object to use for finding the commit
+	 */
 	public function parse_from_git($commit_id, $git) {
 		$filename = "/tmp/tmp-patch.tmp";
 
@@ -94,7 +111,13 @@ class Patch {
 		unlink($filename);
 	}
 
-	// Find and return the patch with specified commit
+	/**
+	 * Find and return the patch with specified commit
+	 *
+	 * @param $commit Commit hash to search for
+	 * @param $patches Array of all patches
+	 * @return The Patch object with the specified hash or FALSE on failure
+	 */
 	public static function get_by_commit($commit, $patches) {
 		foreach($patches as $p) {
 			if ($p->commit_id == $commit)
@@ -104,7 +127,10 @@ class Patch {
 		return FALSE;
 	}
 
-	// Return all patches in the work dir as an array
+	/**
+	 * @param $patch_dir Path to directory containing all exported patch files
+	 * @return All patches in the specified directory as an array of Patch objects
+	 */
 	public static function get_patches($patch_dir) {
 		$files = get_patch_filenames($patch_dir);
 		$patches = array();
@@ -117,7 +143,13 @@ class Patch {
 		return $patches;
 	}
 
-	// Returns the patch for the next commit to be processed from the log
+	/**
+	 * Find the patch for the next commit to process
+	 *
+	 * @param $log		The log object to process
+	 * @param $work_dir	The directory where the exported patches are located
+	 * @return The patch for the next commit to be processed from the Log
+	 */
 	public static function get_next_in_log($log, $work_dir)
 	{
 		$patches = Patch::get_patches($work_dir."/patches");
@@ -127,6 +159,12 @@ class Patch {
 		return $p;
 	}
 
+	/**
+	 * Parse the mainline tag version of the Patch object
+	 *
+	 * @param $git The GitRepo object to use for processing
+	 * @return The tag version of the Patch (ie. v5.4-rc3)
+	 */
 	function get_mainline_tag($git)
 	{
 		$git->cmd("git tag --sort=version:refname --contains ".$this->commit_id, $res);
