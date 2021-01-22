@@ -967,46 +967,6 @@ function cmd_restart($argv, $opts)
 
 }
 
-function cmd_skip($argv, $opts)
-{
-	$work_dir = realpath(get_opt("work-dir", $opts));
-
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
-
-	$branch = $log->get_head_tag("branch");
-	if ($branch == "")
-		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
-
-	$git_dir = $log->get_head_tag("git-dir");
-
-	$git = new GitRepo();
-	$git->set_dir($git_dir);
-
-	$git->change_branch($log);
-
-	$modified = $git->get_modified_paths();
-	if (count($modified) > 0)
-		fatal("You have modified paths. Cannot skip!");
-
-	$git->cmd("git am --abort");
-
-	$p = Patch::get_next_in_log($log, $work_dir);
-	$num_patches = count(Patch::get_patches($work_dir."/patches"));
-
-	$cherry_id = $git->check_for_cherry_pick($log, $p);
-	if ($cherry_id !== FALSE) {
-		info("Cherry picked (?/".$num_patches.") ".$p->commit_id." ".$p->subject);
-		$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
-		return;
-	}
-
-	info("Manual skip (?/".$num_patches.") ".$p->commit_id." ".$p->subject);
-	$log->update_commit($p->commit_id, "manual-skip");
-
-	cmd_apply($argv, $opts);
-}
-
 function cmd_sanity_check($argv, $opts)
 {
 	$work_dir = realpath(get_opt("work-dir", $opts));
@@ -1634,9 +1594,6 @@ function parse_options($argv)
 		exit(0);
 	case "apply":
 		cmd_apply($argv, $options);
-		exit(0);
-	case "skip":
-		cmd_skip($argv, $options);
 		exit(0);
 	case "add":
 		cmd_add($argv, $options);
