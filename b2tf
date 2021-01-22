@@ -190,13 +190,23 @@ class Patch {
 	}
 }
 
+/**
+ * A representation of the commit log
+ *
+ * The log serves two purposes. The first is to contain a complete list of all the commits we're
+ * backporting. The second is to keep track of the upstream commit id of the backported patch.
+ */
 class Log {
-	var $filename = FALSE;
-	var $head; // Backport setup data
-	var $body; // Commits
-	var $tail; // Postponed commits
+	var $filename = FALSE;	///< Full path to the log file
+	var $head;		///< Contains the configuration of the backport
+	var $body;		///< The list of commits for the backport
+	var $tail;		///< Postponed commits (wip)
 
-	// Load the log from the work directory
+	/**
+	 * Load the log from the work directory into the Log object
+	 *
+	 * @param $filename Full path to the Log file to load
+	 */
 	public function load($filename) {
 		$this->filename = $filename;
 		$tmp = file_get_contents($filename);
@@ -212,7 +222,11 @@ class Log {
 			$this->tail = "";
 	}
 
-	// Save the log to the work directory
+	/**
+	 * Save the log to the work directory
+	 *
+	 * @param $filename Full path to the Log file to save
+	 */
 	public function save($filename = FALSE) {
 		$contents  = $this->head."---".PHP_EOL.$this->body."---".PHP_EOL.$this->tail;
 		if ($filename === FALSE)
@@ -227,12 +241,23 @@ class Log {
 	public function set_body($body) { $this->body = $body; }
 	public function append_body($str) { $this->body .= $str; }
 
+	/**
+	 * Append a patch to the bottom of the Log body
+	 *
+	 * @param Patch object to append
+	 */
 	public function append_patch($p) {
 		$this->append_body("# ".$p->subject.PHP_EOL);
 		$this->append_body($p->commit_id.PHP_EOL.PHP_EOL);
 	}
 
-	// Get the contents of a tag and store in $var
+	/**
+	 * Retrieve the contents of a tag and store in $var
+	 *
+	 * @param $line The string containing a tag
+	 * @param $tag The tag to look for
+	 * @param $var Variable to store the result
+	 */
 	private function get_tag($line, $tag, &$var) {
 		$tag = strtolower($tag);
 		if (strtolower(substr($line, 0, strlen($tag))) === $tag) {
@@ -246,7 +271,12 @@ class Log {
 		}
 	}
 
-	// Find requested tag in head and return it
+	/**
+	 * Find requested tag in head and return it
+	 *
+	 * @param $tag Tag to look for
+	 * @return Returns value for requested tag
+	 */
 	public function get_head_tag($tag) {
 		if ($this->filename === FALSE)
 			return FALSE;
@@ -260,7 +290,13 @@ class Log {
 		return $res;
 	}
 
-	// Set backport commit id for specified upstream commit id
+	/**
+	 * Set backport commit id for specified upstream commit id
+	 *
+	 * @param $upstream_id Upstream commit id
+	 * @param $backport_id Backported commit id
+	 * @return FALSE on failure
+	 */
 	public function update_commit($upstream_id, $backport_id) {
 		if ($this->filename === FALSE)
 			return FALSE;
@@ -291,7 +327,11 @@ class Log {
 		$this->save();
 	}
 
-	// Return the latest applied commit from log as array [upstream_id, backport_id]
+	/**
+	 * Get the last applied commit from log
+	 *
+	 * @return Returns commit as array [upstream_id, backport_id]
+	 */
 	public function get_last_commit() {
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
@@ -314,7 +354,11 @@ class Log {
 		return $prev_line;
 	}
 
-	// Find the next commit id to process from the commit log
+	/**
+	 * Find the next commit id to process from the commit log
+	 *
+	 * @return Returns upstream commit id of next commit to process
+	 */
 	public function get_next_commit() {
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
@@ -332,6 +376,11 @@ class Log {
 		}
 	}
 
+	/**
+	 * Get the number of upstream commits in log
+	 *
+	 * @return Returns number of commits in log
+	 */
 	public function get_num_commits() {
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
@@ -346,6 +395,11 @@ class Log {
 		return $i;
 	}
 
+	/**
+	 * Get the index in log for a specified commit id
+	 *
+	 * @return Returns zero based index of specified commit id
+	 */
 	public function get_commit_index($commit_id) {
 		$body = $this->get_body();
 		$body = explode(PHP_EOL, $body);
@@ -367,7 +421,11 @@ class Log {
 		return FALSE;
 	}
 
-	// Sanity check last entry in log
+	/**
+	 * Sanity-check last entry in log
+	 *
+	 * @param $git Git repo to check against
+	 */
 	function sanity_check_last($git) {
 		// Sanity check log vs git-repo
 		$last = $this->get_last_commit();
