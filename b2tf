@@ -1442,18 +1442,13 @@ function cmd_log($argv, $opts)
 	}
 }
 
-function suse_format_patch($p1, $p2, $signoff, $refs, $git)
+function insert_tags_in_patch($filename, $tags, $signoff = "")
 {
-	$mainline = $p2->get_mainline_tag($git);
-	if ($mainline === FALSE)
-		fatal("Couldn't find mainline tag for ".$p2->commit_id." ".$p2->subject);
+	$data = file_get_contents($filename);
+	if ($data === FALSE)
+		fatal("Failed to open patch file for inserting tags");
 
-	$data = file_get_contents($p1->filename);
 	$data = explode(PHP_EOL, $data);
-
-	$tags = array(	"Git-commit: ".$p2->commit_id,
-			"Patch-mainline: ".$mainline,
-			"References: ".$refs);
 
 	// Find appropriate position for tags
 	for ($i = 0; $i < count($data); $i++) {
@@ -1485,11 +1480,28 @@ function suse_format_patch($p1, $p2, $signoff, $refs, $git)
 
 	$data = implode(PHP_EOL, $data);
 
-	$data = explode(PHP_EOL."---".PHP_EOL, $data);
-	$data[0] = $data[0].PHP_EOL."Signed-off-by: ".$signoff;
-	$data = implode(PHP_EOL."---".PHP_EOL, $data);
+	// Add signoff tag
+	if ($signoff != "") {
+		$data = explode(PHP_EOL."---".PHP_EOL, $data);
+		$data[0] = $data[0].PHP_EOL."Signed-off-by: ".$signoff;
+		$data = implode(PHP_EOL."---".PHP_EOL, $data);
+	}
 
-	file_put_contents($p1->filename, $data);
+	file_put_contents($filename, $data);
+
+}
+
+function suse_format_patch($p1, $p2, $signoff, $refs, $git)
+{
+	$mainline = $p2->get_mainline_tag($git);
+	if ($mainline === FALSE)
+		fatal("Couldn't find mainline tag for ".$p2->commit_id." ".$p2->subject);
+
+	$tags = array(	"Git-commit: ".$p2->commit_id,
+			"Patch-mainline: ".$mainline,
+			"References: ".$refs);
+
+	insert_tags_in_patch($p1->filename, $tags, $signoff);
 }
 
 function cmd_format_suse($argv, $opts)
