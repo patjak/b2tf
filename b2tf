@@ -18,7 +18,14 @@ class Util {
 		return stream_get_line(STDIN, 1024, PHP_EOL);
 	}
 
-	public static function ask_from_array($array, $str, $return_num = false) {
+	public static function ask_from_array($array, $str, $print = FALSE) {
+		if ($print === TRUE) {
+			$i = 1;
+			foreach ($array as $item) {
+				msg($i++.")\t".$item);
+			}
+		}
+
 		$entry = "";
 		while ($entry == "") {
 			$no = (int)Util::get_line($str." (1-".count($array)."): ");
@@ -26,10 +33,7 @@ class Util {
 				$entry = $array[$no - 1];
 		}
 
-		if ($return_num == true)
-			return $no;
-		else
-			return $entry;
+		return $entry;
 	}
 
 	public static function ask($str, $options, $default) {
