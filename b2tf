@@ -1607,6 +1607,235 @@ function cmd_list_cherry_picks($argv, $opts)
 	}
 }
 
+function figure_out_release($lines)
+{
+	// Find all releases and count patches
+	$releases = array();
+	foreach ($lines as $line) {
+		if (strpos($line, "Needed in ") === FALSE)
+			continue;
+
+		$rel = substr($line, strlen("Needed in ") + 1);
+
+		// Remove "as fix for..."
+		$pos = strpos($rel, " as fix for ");
+		if ($pos !== FALSE)
+			$rel = substr($rel, 0, $pos);
+
+		isset($releases[$rel]) ? $releases[$rel]++ : $releases[$rel] = 1;
+	}
+
+	ksort($releases);
+	$i = 1;
+	foreach($releases as $r => $count) {
+		msg($i++.")\t".$r." (".$count." patches)");
+	}
+
+	if (count($releases) == 0)
+		fatal("No releases found. Did you select the wrong file-type?");
+
+	// ask_from_array needs an number indexed array
+	$rel_array = array();
+	foreach ($releases as $key => $val)
+		$rel_array[] = $key;
+
+	$release = Util::ask_from_array($rel_array, "Select release:");
+
+	return $release;
+}
+
+function parse_fixes_from_email($lines, $release, $git)
+{
+	$patches = array();
+	for ($i = 0; $i < count($lines); $i++) {
+		$line = $lines[$i];
+
+		if ($line == "")
+			continue;
+		if ($line[0] == " " || $line[0] == "\t")
+			continue;
+
+		// Check if hash is valid
+		$hash = explode(" ", $line)[0];
+		$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+
+		if ($status != 0)
+			fatal("Unknown hash: ".$hash);
+
+		while (TRUE) {
+			$tag = "Needed in";
+			$line = trim($lines[++$i]);
+			if (strpos($line, "Needed in ") === false)
+				break;
+
+			$rel = substr($line, strlen($tag) + 1);
+
+			// Remove "as fix for..."
+			$pos = strpos($rel, " as fix for ");
+			if ($pos !== FALSE)
+				$rel = substr($rel, 0, $pos);
+
+			if ($release == $rel)
+				$patches[] = $hash;
+		}
+	}
+
+	return $patches;
+}
+
+function parse_fixes_from_script($lines, $git)
+{
+	$patches = array();
+	foreach ($lines as $line) {
+		if ($line == "")
+			continue;
+		if (trim($line)[0] == "#")
+			continue;
+
+		if ($line[0] == "\t" || strpos($line, "        ") == 0) {
+			$hash = explode(" ", trim($line))[0];
+
+			// Check if hash is valid
+			$res = NULL;
+			$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+
+			if ($status != 0)
+				fatal("Unknown hash: ".$hash);
+			else
+				$patches[] = $hash;
+
+		}
+	}
+
+	return $patches;
+}
+
+function cmd_suse_fixes($argv, $opts)
+{
+	$work_dir = realpath(get_opt("work-dir", $opts));
+
+	if (isset($opts['fixes-files'])) {
+		$fixes_file = realpath(get_opt("fixes-file", $opts));
+	} else {
+		$fixes_file = FALSE;
+	}
+
+	$signoff = get_opt("signoff", $opts);
+
+	$git_dir = realpath(get_opt("git-dir", $opts));
+	$git = new GitRepo();
+	$git->set_dir($git_dir);
+
+	if ($fixes_file !== FALSE) {
+		$file = file_get_contents($fixes_file);
+		if ($file === FALSE)
+			fatal("Failed to open fixes file: ".$fixes_file);
+		$lines = explode(PHP_EOL, $file);
+
+		if (isset($opts['file-type'])) {
+			$filetype = get_opt("file-type", $opts);
+		} else {
+			$file_types = array("from-email", "from-script");
+			$filetype = Util::ask_from_array($file_types, "Select file-type:", TRUE);
+		}
+
+		// Figure out which release we want to work on
+		if ($filetype == "from-email") {
+			if (isset($opts['release']))
+				$release = get_opt("release", $opts);
+			else
+				$release = figure_out_release($lines);
+
+			$release = str_replace(" ", "-", $release);
+			$release = str_replace(".", "-", $release);
+			$patch_dir = $work_dir."/patches-".$release;
+
+			$patches = parse_fixes_from_email($lines, $release, $git);
+
+		} else if ($filetype == "from-script") {
+			$patch_dir = $work_dir."/patches";
+
+			$patches = parse_fixes_from_script($lines, $git);
+		}
+	} else {
+		msg("No fixes file specified.");
+		$hash = Util::get_line("Enter hash manually: ");
+
+		$res = NULL;
+		$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+
+		if ($status != 0)
+			fatal("Unknown hash: ".$hash);
+		else
+			$patches = array($hash);
+
+		$patch_dir = $work_dir."/patches";
+	}
+
+	// Prepare the filesystem
+	exec("mkdir ".$patch_dir." 2> /dev/null");
+	exec("rm ".$patch_dir."/* 2> /dev/null");
+	exec("rm ".$work_dir."/blacklist.conf 2> /dev/null");
+
+	$reasons = array("comment fixes", "documentation fixes", "not applicable", "other");
+
+	foreach ($patches as $hash) {
+		$p = new Patch();
+		$p->parse_from_git($hash, $git);
+
+		passthru("cd ".$git->get_dir()." && git show ".$hash." | vim -M -");
+		// Clear some noise from vim
+		echo "\033[F                                                                      ";
+		echo "\033[F                                                                      ";
+
+		msg("\r".$p->subject);
+		$backport = Util::ask("Backport patch? ([Y]es/[n]o/[i]gnore/[s]top): ", array("y", "n", "i", "s"), "y");
+
+		if ($backport == "s")
+			break;
+
+		if ($backport == "i")
+			continue;
+
+		if ($backport == "n") {
+			for ($i = 0; $i < count($reasons); $i++)
+				msg(($i + 1).") ".$reasons[$i]);
+
+			$reason = Util::ask_from_array($reasons, "Blacklist reason ");
+			if ($reason == "other")
+				$reason = Util::get_line("Reason: ");
+
+			exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$work_dir."/blacklist.conf");
+			error("Blacklisting: ".$p->commit_id." # ".$reason);
+			echo "\n";
+			continue;
+		}
+
+		unset($res);
+		$git->cmd("git format-patch --no-renames --keep-subject -o ".$patch_dir." ".$hash."~1..".$hash, $res, $output);
+
+		if ($output != 0)
+			fatal("git format-patch failed");
+
+		// Remove the xxxx- prefix from patch names
+		$file = $res[0];
+		$name = substr($file, strlen($patch_dir) + 6);
+		exec("mv ".$file." ".$patch_dir."/".$name);
+		$file = $patch_dir."/".$name;
+
+		$mainline = $p->get_mainline_tag($git);
+		if ($mainline === FALSE)
+			fatal("Failed to get mainline tag for commit: ".$hash);
+
+		$tags = array(	"Git-commit: ".$p->commit_id,
+				"Patch-mainline: ".$mainline,
+				"References: git-fixes");
+
+		insert_tags_in_patch($file, $tags, $signoff);
+		green("Backporting: ".$hash." ".substr($file, strlen($patch_dir) + 6)."\n");
+	}
+}
+
 function parse_options($argv)
 {
 	$opts = array(
@@ -1619,8 +1848,11 @@ function parse_options($argv)
 		"paths:",
 		"signoff:",
 		"refs:",
+		"release:",
 		"fix",
 		"force",
+		"fixes-file:",
+		"file-type:",
 		"debug",
 		);
 
@@ -1678,6 +1910,9 @@ function parse_options($argv)
 		exit(0);
 	case "list-cherry-picks":
 		cmd_list_cherry_picks($argv, $options);
+		exit(0);
+	case "suse-fixes":
+		cmd_suse_fixes($argv, $options);
 		exit(0);
 	}
 }
