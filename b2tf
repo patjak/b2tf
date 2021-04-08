@@ -1774,8 +1774,6 @@ function cmd_suse_fixes($argv, $opts)
 
 	// Prepare the filesystem
 	exec("mkdir ".$patch_dir." 2> /dev/null");
-	exec("rm ".$patch_dir."/* 2> /dev/null");
-	exec("rm ".$work_dir."/blacklist.conf 2> /dev/null");
 
 	$reasons = array("comment fixes", "documentation fixes", "not applicable", "other");
 
