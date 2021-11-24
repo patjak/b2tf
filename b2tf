@@ -1792,15 +1792,20 @@ function cmd_suse_fixes($argv, $opts)
 		}
 	} else {
 		msg("No fixes file specified.");
-		$hash = Util::get_line("Enter hash manually: ");
+		$hashes = Util::get_line("Enter hashes manually (separated by spaces): ");
+		$hashes = explode(" ", $hashes);
 
-		$res = NULL;
-		$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+		$patches = array();
 
-		if ($status != 0)
-			fatal("Unknown hash: ".$hash);
-		else
-			$patches = array($hash);
+		foreach ($hashes as $hash) {
+			$res = NULL;
+			$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+
+			if ($status != 0)
+				fatal("Unknown hash: ".$hash);
+			else
+				$patches[] = $hash;
+		}
 
 		$patch_dir = $work_dir."/patches";
 	}
