@@ -1993,11 +1993,7 @@ Commands:
 
   apply - Start re-applying the series
 
-  diff- Show diff between current tree vs target tree
+  diff - Show diff between current tree vs target tree
 
-  status- Show current status of backport and git repo
-
-Examples:
-	Create series of patches (git format-patch)
-	<?= $argv[0] ?> get-series
+  status - Show current status of backport and git repo
 
