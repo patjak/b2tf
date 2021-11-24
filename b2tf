@@ -1747,11 +1747,20 @@ function cmd_suse_fixes($argv, $opts)
 {
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
-	if (isset($opts['fixes-files'])) {
+	if (isset($opts['refs']))
+		$refs = get_opt("refs", $opts);
+	else
+		$refs = "git-fixes";
+
+	if (isset($opts['fixes-files']))
 		$fixes_file = realpath(get_opt("fixes-file", $opts));
-	} else {
+	else
 		$fixes_file = FALSE;
-	}
+
+	if (isset($opts['skip-review']))
+		$skip_review = TRUE;
+	else
+		$skip_review = FALSE;
 
 	$signoff = get_opt("signoff", $opts);
 
@@ -1819,32 +1828,34 @@ function cmd_suse_fixes($argv, $opts)
 		$p = new Patch();
 		$p->parse_from_git($hash, $git);
 
-		passthru("cd ".$git->get_dir()." && git show ".$hash." | vim -M -");
-		// Clear some noise from vim
-		echo "\033[F                                                                      ";
-		echo "\033[F                                                                      ";
+		if (!$skip_review) {
+			passthru("cd ".$git->get_dir()." && git show ".$hash." | vim -M -");
+			// Clear some noise from vim
+			echo "\033[F                                                                      ";
+			echo "\033[F                                                                      ";
 
-		msg("\r".$p->subject);
-		$backport = Util::ask("Backport patch? ([Y]es/[n]o/[i]gnore/[s]top): ", array("y", "n", "i", "s"), "y");
+			msg("\r".$p->subject);
+			$backport = Util::ask("Backport patch? ([Y]es/[n]o/[i]gnore/[s]top): ", array("y", "n", "i", "s"), "y");
 
-		if ($backport == "s")
-			break;
+			if ($backport == "s")
+				break;
 
-		if ($backport == "i")
-			continue;
+			if ($backport == "i")
+				continue;
 
-		if ($backport == "n") {
-			for ($i = 0; $i < count($reasons); $i++)
-				msg(($i + 1).") ".$reasons[$i]);
+			if ($backport == "n") {
+				for ($i = 0; $i < count($reasons); $i++)
+					msg(($i + 1).") ".$reasons[$i]);
 
-			$reason = Util::ask_from_array($reasons, "Blacklist reason ");
-			if ($reason == "other")
-				$reason = Util::get_line("Reason: ");
+				$reason = Util::ask_from_array($reasons, "Blacklist reason ");
+				if ($reason == "other")
+					$reason = Util::get_line("Reason: ");
 
-			exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$work_dir."/blacklist.conf");
-			error("Blacklisting: ".$p->commit_id." # ".$reason);
-			echo "\n";
-			continue;
+				exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$work_dir."/blacklist.conf");
+				error("Blacklisting: ".$p->commit_id." # ".$reason);
+				echo "\n";
+				continue;
+			}
 		}
 
 		unset($res);
@@ -1865,10 +1876,10 @@ function cmd_suse_fixes($argv, $opts)
 
 		$tags = array(	"Git-commit: ".$p->commit_id,
 				"Patch-mainline: ".$mainline,
-				"References: git-fixes");
+				"References: ".$refs);
 
 		insert_tags_in_patch($file, $tags, $signoff);
-		green("Backporting: ".$hash." ".substr($file, strlen($patch_dir) + 6)."\n");
+		green("Backporting: ".$hash." ".substr($file, strlen($patch_dir) + 1));
 	}
 }
 
@@ -1883,6 +1894,7 @@ function parse_options($argv)
 		"git-dir:",
 		"paths:",
 		"signoff:",
+		"skip-review",
 		"refs:",
 		"release:",
 		"fix",
