@@ -1504,6 +1504,20 @@ function suse_format_patch($p1, $p2, $signoff, $refs, $git)
 	insert_tags_in_patch($p1->filename, $tags, $signoff);
 }
 
+// Create a list of all backported patches from the suse repo (to check for duplicates)
+function get_suse_backports($suse_repo_path)
+{
+	exec("cat ".$suse_repo_path."/patches.suse/*.patch | grep -i 'git-commit\|alt-commit'", $lines);
+
+	$commits = array();
+	foreach ($lines as $line) {
+		$line = explode(" ", $line);
+		$commits[] = trim($line[1]);
+	}
+
+	return $commits;
+}
+
 function cmd_format_suse($argv, $opts)
 {
 	$work_dir = realpath(get_opt("work-dir", $opts));
@@ -1511,6 +1525,7 @@ function cmd_format_suse($argv, $opts)
 	$stop = get_opt("stop", $opts);
 	$signoff = get_opt("signoff", $opts);
 	$refs = get_opt("refs", $opts);
+	$suse_repo_path = get_opt("suse-repo-path", $opts);
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1518,6 +1533,8 @@ function cmd_format_suse($argv, $opts)
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$suse_backports = get_suse_backports($suse_repo_path);
 
 	// $start = $log->get_head_tag("range-start");
 	$git_dir = $log->get_head_tag("git-dir");
@@ -1527,18 +1544,18 @@ function cmd_format_suse($argv, $opts)
 
 	$git->change_branch($log);
 
-	exec("mkdir -p ".$work_dir."/patches-suse");
-	exec("rm ".$work_dir."/patches-suse/*");
+	exec("mkdir -p ".$work_dir."/patches.suse");
+	exec("rm ".$work_dir."/patches.suse/*");
 
 	info("Exporting patches...");
-	$git->cmd("git format-patch -o ".$work_dir."/patches-suse/ --no-renames --keep-subject ".$start."..".$stop);
+	$git->cmd("git format-patch -o ".$work_dir."/patches.suse/ --no-renames --keep-subject ".$start."..".$stop);
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
 
 	info("Formatting patches...");
-	$patches = Patch::get_patches($work_dir."/patches-suse");
-	$suse_filenames = "./scripts/git_sort/series_insert.py ";
+	$patches = Patch::get_patches($work_dir."/patches.suse");
+	$suse_filenames = "";
 	for ($i = 0, $j = 0; $i < count($body); $i++) {
 		$line = explode(" ", $body[$i]);
 		if (strlen($line[0]) == 40 && strlen($line[1]) == 40) {
@@ -1554,6 +1571,14 @@ function cmd_format_suse($argv, $opts)
 			$p2 = new Patch();
 			$p2->parse_from_git($line[0], $git);
 
+			if (in_array($p2->commit_id, $suse_backports)) {
+				// Patch is already backported so skip it
+				msg("(already backported) ".$p_file->commit_id." ".$p_file->subject);
+				exec("rm ".$work_dir."/patches.suse/".basename($p_file->filename));
+				$j++;
+				continue;
+			}
+
 			if ($p1->subject != $p2->subject)
 				error("Subject not matching\n".$p1->subject." != ".$p2->subject);
 
@@ -1565,7 +1590,10 @@ function cmd_format_suse($argv, $opts)
 		}
 	}
 
-	file_put_contents($work_dir."/patches-suse/suse_sort.sh", $suse_filenames);
+	exec("cp ".$work_dir."/patches.suse/* ".$suse_repo_path."/patches.suse/");
+	passthru("cd ".$suse_repo_path." && ./scripts/git_sort/series_insert.py ".$suse_filenames);
+
+	file_put_contents($work_dir."/patches.suse/filenames.log", $suse_filenames);
 }
 
 function cmd_list_cherry_picks($argv, $opts)
@@ -1851,6 +1879,7 @@ function parse_options($argv)
 		"force",
 		"fixes-file:",
 		"file-type:",
+		"suse-repo-path:",
 		"debug",
 		);
 
