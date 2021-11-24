@@ -685,6 +685,11 @@ function get_patch_filenames($dir)
 function get_opt($name, $opts)
 {
 	$opt = isset($opts[$name]) ? $opts[$name] : "";
+
+	// Handle defaults
+	if ($opt == "" && $name == "work-dir")
+		return "./";
+
 	if ($opt == "")
 		fatal("Missing --".$name." <arg>");
 
