@@ -127,8 +127,8 @@ function __strip_diff($diff)
 function check_for_duplicate($p, $git, &$match)
 {
 	unset($res);
-	$git->cmd("git rev-list --no-merges -n2 --oneline HEAD --grep \"".
-		  addslashes($p->subject)."\"", $res);
+	$git->cmd("git rev-list --no-merges -n2 --oneline HEAD --grep \"^".
+		  addslashes($p->subject)."$\"", $res);
 
 	foreach ($res as $commit) {
 		$commit = explode(" ", $commit)[0];
