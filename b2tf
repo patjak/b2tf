@@ -1524,6 +1524,8 @@ function get_suse_backports($suse_repo_path)
 		$commits[] = trim($line[1]);
 	}
 
+	msg("Found ".count($commits)." already backported commits");
+
 	return $commits;
 }
 
