@@ -1516,15 +1516,26 @@ function suse_format_patch($p1, $p2, $signoff, $refs, $git)
 // Create a list of all backported patches from the suse repo (to check for duplicates)
 function get_suse_backports($suse_repo_path)
 {
-	exec("find ".$suse_repo_path."/patches.suse/ | grep \"\\.patch\" | xargs cat | grep -i 'git-commit\|alt-commit'", $lines);
+	exec("find ".$suse_repo_path."/patches.suse/ | grep \"\\.patch$\" | xargs cat | grep -i 'git-commit\|alt-commit'", $lines);
 
 	$commits = array();
+	$num_lines = count($lines);
+	$i = 1;
 	foreach ($lines as $line) {
 		$line = explode(" ", $line);
-		$commits[] = trim($line[1]);
+		$commit_id = $line[1];
+		if (strlen($commit_id) != 40)
+			$commit_id = $line[2];
+
+		if (strlen($commit_id) != 40) {
+			error("\nFound invalid backport commit id: ".var_dump($line));
+			continue;
+		}
+
+		$commits[] = $commit_id;
 	}
 
-	msg("Found ".count($commits)." already backported commits");
+	msg("\nFound ".count($commits)." suse backports");
 
 	return $commits;
 }
@@ -1684,8 +1695,10 @@ function parse_options($argv)
 		"paths:",
 		"signoff:",
 		"skip-review",
+		"skip-fails",
 		"refs:",
 		"release:",
+		"repo-tag:",
 		"fix",
 		"force",
 		"fixes-file:",

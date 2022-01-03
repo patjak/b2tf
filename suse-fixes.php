@@ -103,6 +103,38 @@ function parse_fixes_from_script($lines, $git)
 	return $patches;
 }
 
+function load_fixes_file($fixes_file, $work_dir, $git)
+{
+	$file = file_get_contents($fixes_file);
+	if ($file === FALSE)
+		fatal("Failed to open fixes file: ".$fixes_file);
+	$lines = explode(PHP_EOL, $file);
+
+	if (isset($opts['file-type'])) {
+		$filetype = get_opt("file-type", $opts);
+	} else {
+		$file_types = array("from-email", "from-script");
+		$filetype = Util::ask_from_array($file_types, "Select file-type:", TRUE);
+	}
+
+	// Figure out which release we want to work on
+	if ($filetype == "from-email") {
+		if (isset($opts['release']))
+			$release = get_opt("release", $opts);
+		else
+			$release = figure_out_release($lines);
+
+		$release = str_replace(" ", "-", $release);
+		$release = str_replace(".", "-", $release);
+		$patches = parse_fixes_from_email($lines, $release, $git);
+
+	} else if ($filetype == "from-script") {
+		$patches = parse_fixes_from_script($lines, $git);
+	}
+
+	return $patches;
+}
+
 // Should only be used from check_for_duplicate()
 function __strip_diff($diff)
 {
@@ -123,72 +155,234 @@ function __strip_diff($diff)
 	return $out;
 }
 
-// Check git repo for patches matching the contents of the provided patch
-function check_for_duplicate($p, $git, &$match)
+// Check git repo for commits matching the contents of the provided patch
+function check_for_duplicate($p, $git, $backports, $kernel_version)
 {
-	unset($res);
-	$git->cmd("git rev-list --no-merges -n2 --oneline HEAD --grep \"^".
-		  addslashes($p->subject)."$\"", $res);
+	// To speed things up we create a commit_id to subject array
+	static $cache = array();
 
-	foreach ($res as $commit) {
-		$commit = explode(" ", $commit)[0];
+	if (count($cache) == 0) {
+		msg("Creating cache for duplicate checks...");
+
+		unset($res);
+		$git->cmd("git log --no-merges --pretty=\"%H %s\" v".$kernel_version."", $res);
+		foreach ($res as $line) {
+			$line = explode(" ", $line);
+
+			// Fun fact: there's actually a commit from 2005 with no subject
+			// 7b7abfe3dd81d659a0889f88965168f7eef8c5c6
+			if (isset($line[1])) {
+				$commit_id = $line[0];
+				unset($line[0]);
+				$subject = implode(" ", $line);
+				$cache[$commit_id] = $subject;
+			}
+		}
+
+		msg("Cached ".count($cache)." commits");
+	}
+
+	debug("Checking for duplicate...");
+
+	$matches = array();
+	foreach ($cache as $commit_id => $subject) {
+		if ($subject == $p->subject && $commit_id != $p->commit_id) {
+			debug($subject." == ".$p->subject);
+			$matches[] = $commit_id;
+		}
+	}
+
+	if (count($matches) > 1)
+		msg("Found ".count($matches)." potential duplicates");
+
+	foreach ($matches as $commit_id) {
+		$commit_id = explode(" ", $commit_id)[0];
 		$dup = new Patch();
-		$dup->parse_from_git($commit, $git);
+		$dup->parse_from_git($commit_id, $git);
 
 		if ($p->commit_id == $dup->commit_id)
 			continue;
-		else
-			break;
+
+		unset($res);
+		$git->cmd("git diff ".$p->commit_id."~1..".$p->commit_id, $res, $status);
+		$diff1 = __strip_diff($res);
+
+		unset($res);
+		$git->cmd("git diff ".$dup->commit_id."~1..".$dup->commit_id, $res, $status);
+		$diff2 = __strip_diff($res);
+
+		if (strcmp($diff1, $diff2) == 0) {
+			// We found a full match so no need to look further
+			green("Found exact duplicate in ".$dup->commit_id);
+			return $dup;
+		} else {
+			msg($p->commit_id.": ".strlen($diff1));
+			msg($dup->commit_id.": ".strlen($diff2));
+			file_put_contents("/tmp/1", $diff1);
+			file_put_contents("/tmp/2", $diff2);
+			passthru("diff -Naur /tmp/1 /tmp/2");
+			passthru("rm /tmp/1");
+			passthru("rm /tmp/2");
+
+			error("Found non-exact duplicate in ".$dup->commit_id);
+			$ask = Util::ask("(A)ccept duplicate or (s)kip: ", array("a", "s"), "a");
+
+			if ($ask == "a")
+				return $dup;
+		}
 	}
 
-	if ($p->commit_id == $dup->commit_id) {
-		$match = FALSE;
-		return FALSE;
-	}
-
-	unset($res);
-	$git->cmd("git diff ".$p->commit_id."~1..".$p->commit_id, $res, $status);
-	$diff1 = __strip_diff($res);
-
-	unset($res);
-	$git->cmd("git diff ".$dup->commit_id."~1..".$dup->commit_id, $res, $status);
-	$diff2 = __strip_diff($res);
-
-	if (strcmp($diff1, $diff2) == 0) {
-		$match = TRUE; // Contents match
-	} else {
-		msg($p->commit_id.": ".strlen($diff1));
-		msg($dup->commit_id.": ".strlen($diff2));
-		file_put_contents("/tmp/1", $diff1);
-		file_put_contents("/tmp/2", $diff2);
-		passthru("diff -Naur /tmp/1 /tmp/2");
-		passthru("rm /tmp/1");
-		passthru("rm /tmp/2");
-		$match = FALSE; // Contents doesn't match
-	}
-
-	return $dup;
+	return FALSE; 
 }
 
-function insert_and_sequence_patch($suse_repo_path, $file_dst, $file_src, &$out)
+function get_suse_patch_filename($suse_repo_path, $commit_id)
 {
-	passthru("cp ".$file_src." ".$suse_repo_path."/patches.suse/", $res);
+	exec("cd ".$suse_repo_path."/patches.suse && grep -Rl \"Git-commit: ".$commit_id."\"", $res);
+
+	return $res[0];
+}
+
+function suse_insert_file($file_src, $file_dst)
+{
+	debug("Copying file ".$file_src." to ".$file_dst);
+	passthru("cp ".$file_src." ".$file_dst, $res);
 	if ($res != 0)
 		fatal("ERROR: failed to copy file to kernel-source repo");
 
-	passthru("cd ".$suse_repo_path." && ./scripts/git_sort/series_insert.py patches.suse/".$file_dst, $res);
+	return $res;
+}
+
+function suse_insert_patch($suse_repo_path, $file_dst)
+{
+	debug("Inserting patch...");
+	passthru("cd ".$suse_repo_path." && ./scripts/git_sort/series_insert.py patches.suse/".basename($file_dst), $res);
 	if ($res != 0) {
 		error("SKIP: Failed to insert patch into series");
-		passthru("rm ".$suse_repo_path."/patches.suse/".$file_dst);
-		return FALSE;
+		passthru("rm ".$suse_repo_path."/patches.suse/".basename($file_dst));
 	}
 
+	return $res;
+}
+
+function suse_sequence_patch($suse_repo_path, &$out)
+{
+	debug("Sequencing patch...");
 	unset($output);
 	exec("cd ".$suse_repo_path." && ./scripts/sequence-patch.sh --rapid 2>&1", $output, $res);
 
 	$out = $output;
+
+	if ($res != 0) {
+		$hunk_ok = 0;
+		$hunk_fail = 0;
+		foreach($output as $line) {
+			$line = explode(" ", trim($line));
+			if ($line[0] == "Hunk" && $line[2] == "OK")
+				$hunk_ok++;
+
+			if ($line[0] == "Hunk" && $line[2] == "FAILED")
+				$hunk_fail++;
+		}
+
+		if ($hunk_fail == 0)
+			green("Hunks failed: none");
+		else
+			error("Hunks failed: ".$hunk_fail."/".($hunk_ok + $hunk_fail));
+	}
+
 	return $res;
 }
+
+function undo_insert_and_sequence_patch($suse_repo_path, $filename)
+{
+	debug("Undoing insert and sequence patch");
+	passthru("rm ".$suse_repo_path."/patches.suse/".$filename);
+	passthru("cd ".$suse_repo_path." && git restore series.conf");
+}
+
+// Let the user review the patch
+function view_commit($commit_id, $git)
+{
+	passthru("cd ".$git->get_dir()." && tig show ".$commit_id);
+}
+
+// Find a filename for the patch that doesn't already exist in patches.suse/
+function find_valid_filename($filename, $path)
+{
+	$filename_tmp = $filename;
+	$i = 1;
+	while (file_exists($path."/patches.suse/".$filename_tmp))
+		$filename_tmp = sprintf("%04d", $i++)."-".$filename;
+
+	if ($filename != $filename_tmp)
+		debug("Patch filename got changed to ".$filename_tmp);
+
+	$filename = $filename_tmp;
+
+	debug("Found valid name: ".$filename);
+	return $filename;
+}
+
+function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
+{
+	$reasons = array("comment fixes", "documentation fixes", "not applicable", "other");
+
+	if ($reason == "") {
+		for ($i = 0; $i < count($reasons); $i++)
+			msg(($i + 1).") ".$reasons[$i]);
+
+		$reason = Util::ask_from_array($reasons, "Blacklist reason ");
+		if ($reason == "other")
+			$reason = Util::get_line("Reason: ");
+	}
+
+	exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$suse_repo_path."/blacklist.conf");
+	msg("Blacklisting: ".$p->commit_id." # ".$reason);
+
+	$git->cmd("git log --oneline -n1 ".$p->commit_id, $oneline, $res);
+	if ($res != 0) {
+		error("Failed to get oneline log of commit id: ".$p->commit_id);
+		return;
+	}
+	$oneline = $oneline[0];
+
+	exec("cd ".$suse_repo_path." && git add blacklist.conf && git commit -m \"blacklist.conf: ".$oneline."\"", $out, $res);
+
+	if ($res != 0)
+		error("Failed to commit to blacklist.conf");
+
+	return $res;
+}
+
+function get_kernel_version($suse_repo_path)
+{
+	$file = file_get_contents($suse_repo_path."/rpm/config.sh");
+
+	$lines = explode(PHP_EOL, $file);
+	$version = FALSE;
+
+	foreach ($lines as $line) {
+		$str = "SRCVERSION=";
+		if (strncmp($str, $line, strlen($str)) == 0)
+			$version = explode("=", $line)[1];
+	}
+
+	return $version;
+}
+
+/**
+ * Process should look like this:
+ * - Check if commit is already backported
+ * - Check if commit is blacklisted
+ * - Find a filename that doesn't collide in kernel-source/patches.suse
+ * - Add fake tags to patch and quickly assess if it applies
+ * - If it applies, add real tags and commit
+ * - If it doesn't apply, check for Alt-commit from rapidquilt result
+ * - - Ask to commit, Retry or Skip
+ * - If it doesn't apply check for duplicate
+ * - If duplicate found, ask for blacklist, retry or skip
+ * - If patch just fails, ask for retry or skip
+ **/
 
 function cmd_suse_fixes($argv, $opts)
 {
@@ -210,12 +404,20 @@ function cmd_suse_fixes($argv, $opts)
 	else
 		$skip_review = FALSE;
 
+	// Skip all patches that doesn't immediately applies
+	if (isset($opts['skip-fails']))
+		$skip_fails = TRUE;
+	else
+		$skip_fails = FALSE;
+
+	if (isset($opts['repo-tag']))
+		$repo_tag = get_opt("repo-tag", $opts);
+
 	$signoff = get_opt("signoff", $opts);
 
 	$git_dir = realpath(get_opt("git-dir", $opts));
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
-
 
 	// Check that user is on the right branch
 	$out = "";
@@ -239,37 +441,14 @@ function cmd_suse_fixes($argv, $opts)
 			fatal("Failed to create and checkout branch: ".$branch_name);
 	}
 
+	// Find the kernel version in the suse kernel-source repo
+	$kernel_version = get_kernel_version($suse_repo_path);
+	msg("SUSE repo kernel version: ".$kernel_version);
+	if ($kernel_version === FALSE)
+		fatal("Failed to get SUSE repo kernel version");
+
 	if ($fixes_file !== FALSE) {
-		$file = file_get_contents($fixes_file);
-		if ($file === FALSE)
-			fatal("Failed to open fixes file: ".$fixes_file);
-		$lines = explode(PHP_EOL, $file);
-
-		if (isset($opts['file-type'])) {
-			$filetype = get_opt("file-type", $opts);
-		} else {
-			$file_types = array("from-email", "from-script");
-			$filetype = Util::ask_from_array($file_types, "Select file-type:", TRUE);
-		}
-
-		// Figure out which release we want to work on
-		if ($filetype == "from-email") {
-			if (isset($opts['release']))
-				$release = get_opt("release", $opts);
-			else
-				$release = figure_out_release($lines);
-
-			$release = str_replace(" ", "-", $release);
-			$release = str_replace(".", "-", $release);
-			$patch_dir = $work_dir."/patches-".$release;
-
-			$patches = parse_fixes_from_email($lines, $release, $git);
-
-		} else if ($filetype == "from-script") {
-			$patch_dir = $work_dir."/patches";
-
-			$patches = parse_fixes_from_script($lines, $git);
-		}
+		$patches = load_fixes_file($fixes_file, $work_dir, $git);
 	} else {
 		msg("No fixes file specified.");
 		$hashes = Util::get_line("Enter hashes manually (separated by spaces): ");
@@ -287,25 +466,27 @@ function cmd_suse_fixes($argv, $opts)
 				$patches[] = $hash;
 		}
 
-		$patch_dir = $work_dir."/patches";
 	}
 
 	// Prepare the filesystem
+	$patch_dir = $work_dir."/patches";
 	exec("mkdir ".$patch_dir." 2> /dev/null");
-
-	$reasons = array("comment fixes", "documentation fixes", "not applicable", "other");
 
 	$suse_backports = get_suse_backports($suse_repo_path);
 	$suse_blacklists = get_suse_blacklists($suse_repo_path);
 
 	$actually_backported = 0;
-	$alt_commits = array();
 
+	msg("Found ".count($patches)." patches");
+
+	$i = 0;
 	foreach ($patches as $hash) {
+		$i++;
 		$p = new Patch();
 		$p->parse_from_git($hash, $git);
 
-		green("\nBackporting: ".$hash." ".$p->subject);
+		msg("\nBackporting (".$i."/".count($patches)."):");
+		green($hash." ".$p->subject);
 
 		if (in_array($p->commit_id, $suse_backports)) {
 			error("SKIP: Patch is already backported");
@@ -317,14 +498,127 @@ function cmd_suse_fixes($argv, $opts)
 			continue;
 		}
 
-		if (!$skip_review) {
-			passthru("cd ".$git->get_dir()." && git show ".$hash." | vim -M -");
-			// Clear some noise from vim
-			echo "\033[F                                                                      ";
-			echo "\033[F                                                                      ";
-			echo "\r";
+		unset($res);
+		$git->cmd("git format-patch --no-renames --keep-subject -o ".$patch_dir." ".$hash."~1..".$hash, $res, $output);
 
-			$backport = Util::ask("Backport patch? ([Y]es/[b]lacklist/[s]kip/[a]bort): ", array("y", "n", "s", "a"), "y");
+		if ($output != 0)
+			fatal("git format-patch failed");
+
+		// Remove the xxxx- prefix from patch names
+		$filename = substr(basename($res[0]), 5);
+		exec("mv ".$res[0]." ".$patch_dir."/".$filename);
+		$file_src = $patch_dir."/".$filename;
+
+		// Find a non-colliding filename
+		$filename = find_valid_filename($filename, $suse_repo_path);
+		$file_dst = $suse_repo_path."/patches.suse/".$filename;
+
+		suse_insert_file($file_src, $file_dst);
+
+		// Add fake mainline tag into patch so we can sequence and catch an early fail
+		$fake_mainline = "5.5-rc5";
+		$tags = array(	"Git-commit: ".$p->commit_id,
+				"Patch-mainline: ".$fake_mainline,
+				"References: ".$refs);
+
+		if (isset($repo_tag))
+			$tags[] = "Git-repo: ".$repo_tag;
+
+		debug("Inserting fake tags in patch: ".$filename);
+		insert_tags_in_patch($file_dst, $tags, $signoff);
+
+		$res = suse_insert_patch($suse_repo_path, $file_dst);
+		$res += suse_sequence_patch($suse_repo_path, $out);
+		undo_insert_and_sequence_patch($suse_repo_path, $filename);
+
+		// If we're working on a non-mainline repo ($repo_tag is set) we cannot do any clever tricks so skip this part
+		if (isset($repo_tag)) {
+			if ($res == 0)
+				msg("Patch will apply without modifications");
+			else
+				msg("The patch failed to apply");
+		} else if ($res != 0) {
+			// Check for obvious Alt-commit
+			$alt_commit = false;
+			$failed_patch = "";
+			$hunk_ok = 0;
+			$hunk_fail = 0;
+			foreach ($out as $line) {
+				$failed_line = explode(" ", trim($line));
+				if (count($failed_line) == 3 && $failed_line[0] == "Patch" && $failed_line[2] == "FAILED") {
+					$failed_patch = $failed_line[1];
+
+					if ($failed_patch != "patches.suse/".$filename) {
+						msg("A refresh will be required for: ".$failed_patch);
+						break;
+					}
+				}
+
+				if (trim($line) == "! = Reverting the patch fixes this failure.") {
+					$alt_commit = true;
+					break;
+				}
+			}
+
+
+			if ($alt_commit) {
+				// Find original commit
+				$dup = check_for_duplicate($p, $git, $suse_backports, $kernel_version);
+				if ($dup !== FALSE) {
+					// We found an acceptable match
+					$suse_patch_file = get_suse_patch_filename($suse_repo_path, $dup->commit_id);
+					passthru("cd ".$suse_repo_path." && ./scripts/patch-tag ".
+						 "--Add Alt-commit=".$p->commit_id." patches.suse/".
+						 $suse_patch_file, $res_alt);
+					if ($res_alt != 0) {
+						error("FAIL: Failed to add alt-commit tag to file: ".$suse_patch_file);
+						Util::pause();
+						continue;
+					}
+
+					msg("The patch is an Alt-commit");
+					Util::pause();
+					passthru("cd ".$suse_repo_path." && ./scripts/log", $status);
+					$actually_backported++;
+					continue;
+				} else {
+					error("FAIL: Failed to find an Alt-commit. This is unusual.");
+				}
+			} else if ($failed_patch == "patches.suse/".$filename) {
+				$dup = check_for_duplicate($p, $git, $suse_backports, $kernel_version);
+
+				if ($dup !== FALSE) {
+					$ask = Util::ask("(B)lacklist duplicate, (s)kip or (a)bort: ", array("b", "s", "a"), "b");
+
+					if ($ask == "a")
+						break;
+
+					if ($ask == "s")
+						continue;
+
+					if ($ask == "b") {
+						$res = suse_blacklist_patch($p, $suse_repo_path, $git, "Duplicate of ".$dup->commit_id.": ".$dup->subject);
+						$actually_backported++;
+						continue;
+					}
+				}
+			}
+
+			msg("The patch failed to apply");
+			if ($skip_fails) {
+				error("SKIP: Skipping fails");
+				continue;
+			}
+		} else {
+			msg("Patch will apply without modifications");
+		}
+
+		// undo_insert_and_sequence_patch($suse_repo_path, $filename);
+		// continue;
+
+		if (!$skip_review) {
+			view_commit($hash, $git);
+			$backport = Util::ask("Backport patch? ([Y]es/[b]lacklist/[s]kip/[a]bort): ", array("y", "b", "s", "a"), "y");
 
 			if ($backport == "a")
 				break;
@@ -333,171 +627,65 @@ function cmd_suse_fixes($argv, $opts)
 				continue;
 
 			if ($backport == "b") {
-				for ($i = 0; $i < count($reasons); $i++)
-					msg(($i + 1).") ".$reasons[$i]);
-
-				$reason = Util::ask_from_array($reasons, "Blacklist reason ");
-				if ($reason == "other")
-					$reason = Util::get_line("Reason: ");
-
-				exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$work_dir."/blacklist.conf");
-				error("Blacklisting: ".$p->commit_id." # ".$reason);
-				echo "\n";
+				$res = suse_blacklist_patch($p, $suse_repo_path, $git);
+				$actually_backported++;
 				continue;
 			}
 		}
 
-		unset($res);
-		$git->cmd("git format-patch --no-renames --keep-subject -o ".$patch_dir." ".$hash."~1..".$hash, $res, $output);
-
-		if ($output != 0)
-			fatal("git format-patch failed");
-
-		// Remove the xxxx- prefix from patch names
-		$file = $res[0];
-		$file_dst = substr($file, strlen($patch_dir) + 6);
-		exec("mv ".$file." ".$patch_dir."/".$file_dst);
-		$file = $patch_dir."/".$file_dst;
-
-		msg("Inserting tags...");
-		$mainline = $p->get_mainline_tag($git);
-		if ($mainline === FALSE)
-			fatal("Failed to get mainline tag for commit: ".$hash);
+		// At this point we need the real tags
+		debug("Inserting real tags...");
+		if (isset($repo_tag)) {
+			$mainline = "Queued in subsystem maintainer repo";
+		} else {
+			$mainline = $p->get_mainline_tag($git);
+			if ($mainline === FALSE)
+				fatal("Failed to get mainline tag for commit: ".$hash);
+		}
 
 		$tags = array(	"Git-commit: ".$p->commit_id,
 				"Patch-mainline: ".$mainline,
 				"References: ".$refs);
 
-		insert_tags_in_patch($file, $tags, $signoff);
+		if (isset($repo_tag))
+			$tags[] = "Git-repo: ".$repo_tag;
 
-		// The patch is now prepared for kernel-source
-		// Try applying it into the kernel-source tree
+		suse_insert_file($file_src, $file_dst);
+		insert_tags_in_patch($file_dst, $tags, $signoff);
+		$res = suse_insert_patch($suse_repo_path, $file_dst); // FIXME: We can skip this insert if we keep the fake one
+		$res += suse_sequence_patch($suse_repo_path, $out);
 
-		if (file_exists($suse_repo_path."/patches.suse/".$file_dst)) {
-			msg("Patch-file already exists but commit id doesn't. Must be an Alt-commit.");
-			$dup = check_for_duplicate($p, $git, $match);
-			if ($match !== TRUE) {
-				error("Found non-exact duplicate in ".$dup->commit_id.".");
-				$ask = Util::ask("(A)dd alt-commit or (s)kip: ", array("a", "s"), "a");
+		while ($res != 0) {
+			error("Failed to sequence the patch");
+			$ask = Util::ask("(R)etry, (s)kip, (b)lacklist or (v)iew again: ", array("r", "s", "b", "v"), "r");
 
-				// Skip
-				if ($ask == "s")
-					continue;
-			}
-
-			passthru("cd ".$suse_repo_path." && ./scripts/patch-tag --Add Alt-commit=".$p->commit_id." patches.suse/".$file_dst, $res_alt);
-			if ($res_alt != 0) {
-				error("Failed to add alt-commit tag to file");
+			if ($ask == "v") {
+				view_commit($hash, $git);
 				continue;
 			}
 
-			Util::pause();
-			passthru("cd ".$suse_repo_path." && ./scripts/log", $status);
-			$actually_backported++;
+			if ($ask == "s")
+				break;
 
-			continue;
+			if ($ask == "b") {
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
+				$res = suse_blacklist_patch($p, $suse_repo_path, $git);
+				$actually_backported++;
+				break;
+			}
+
+			$res = suse_sequence_patch($suse_repo_path, $out);
 		}
-
-		msg("Inserting and sequencing patch...");
-		$res = insert_and_sequence_patch($suse_repo_path, $file_dst, $file, $out);
-		if ($res === FALSE)
-			continue;
 
 		if ($res != 0) {
-			$str = trim($out[count($out) - 3]);
-			if ($str == "! = Reverting the patch fixes this failure.") {
-				// Undo the insert
-				passthru("rm ".$suse_repo_path."/patches.suse/".$file_dst);
-				passthru("cd ".$suse_repo_path." && git restore series.conf");
-
-				// Find original commit
-				unset($out);
-				exec("cd ".$suse_repo_path."/patches.suse && grep -l \"".$p->subject."\" *.patch", $out, $res_alt);
-
-
-				// If we only found one match, we most likely have found the alt-commit, so add the tag
-				if (count($out) == 1) {
-					$match = $out[0];
-					green("Adding alt-commit");
-					passthru("cd ".$suse_repo_path." && ./scripts/patch-tag --Add Alt-commit=".$p->commit_id." patches.suse/".$match, $res_alt);
-					if ($res_alt != 0)
-						error("Failed to add alt-commit tag");
-					Util::pause();
-					passthru("cd ".$suse_repo_path." && ./scripts/log", $status);
-					$actually_backported++;
-				}
-
-				continue;
-			} else {
-				msg("Checking for duplicates...");
-				$dup = check_for_duplicate($p, $git, $match);
-				if ($dup !== FALSE) {
-					msg("Found: ".$dup->commit_id.": ".$dup->subject);
-					if ($match == TRUE)
-						green("Contents match!");
-					else
-						error("Warning: contents doesn't match");
-				}
-
-				while ($res != 0) {
-
-					msg("FAIL: Patch doesn't apply");
-
-					if ($dup === FALSE)
-						$line = Util::get_line("(R)etry or (s)kip: ");
-					else
-						$line = Util::get_line("(R)etry, (s)kip or (b)lacklist duplicate: ");
-
-					$line = trim(strtolower($line));
-					if ($line == "s")
-						break;
-
-					if ($line == "b" && $dup !== FALSE) {
-						$bl_file = file_get_contents($suse_repo_path."/blacklist.conf");
-						if ($bl_file === FALSE) {
-							error("Failed to read blacklist.conf");
-							break;
-						}
-
-						$bl_file .= $p->commit_id." # Duplicate of ".$dup->commit_id.": ".$dup->subject."\n";
-						if (file_put_contents($suse_repo_path."/blacklist.conf", $bl_file) === FALSE) {
-							error("Failed to write to blacklist.conf");
-							break;
-						}
-
-						unset($res_oneliner);
-						$git->cmd("git log --oneline -n1 ".$p->commit_id, $res_oneliner, $status);
-						$oneliner = trim($res_oneliner[0]);
-						passthru("cd ".$suse_repo_path." && git add blacklist.conf", $status);
-						passthru("cd ".$suse_repo_path." && git commit -m \"blacklist.conf: ".$oneliner."\"", $status);
-						$actually_backported++;
-						break;
-					} else {
-						msg("Sequencing patches...");
-						unset($out);
-						exec("cd ".$suse_repo_path." && ./scripts/sequence-patch.sh --rapid 2>&1", $out, $res);
-					}
-				}
-			}
-
-			if ($res != 0) {
-				passthru("rm ".$suse_repo_path."/patches.suse/".$file_dst);
-				passthru("cd ".$suse_repo_path." && git restore series.conf");
-				continue;
-			}
-			info("Patch applied successfully!");
+			undo_insert_and_sequence_patch($suse_repo_path, $filename);
+			continue;
 		}
 
-		passthru("cd ".$suse_repo_path." && git add patches.suse/".$file_dst);
+		green("Patch applied successfully");
 		Util::pause();
+		passthru("cd ".$suse_repo_path." && git add patches.suse/".$filename, $res);
 		passthru("cd ".$suse_repo_path." && ./scripts/log", $res);
-
-		if ($res != 0) {
-			error("SKIP: Patch couldn't be commited");
-			passthru("rm ".$suse_repo_path."/patches.suse/".$file_dst);
-			passthru("cd ".$suse_repo_path." && git restore series.conf");
-			continue;
-		}
 
 		$actually_backported++;
 	}
