@@ -140,7 +140,7 @@ class Patch {
 	public function parse_from_git($commit_id, $git) {
 		$filename = "/tmp/tmp-patch.tmp";
 
-		$git->cmd("git log -n1 ".$commit_id, $output, $status);
+		$git->cmd("git log -n1 ".$commit_id." 2> /dev/null", $output, $status);
 		if ($status != 0)
 			return FALSE;
 
