@@ -135,7 +135,7 @@ function load_fixes_file($fixes_file, $work_dir, $git)
 	return $patches;
 }
 
-// Should only be used from check_for_duplicate()
+// Should only be used from check_for_duplicate() or check_for_alt_commits()
 function __strip_diff($diff)
 {
 	$out = "";
@@ -153,6 +153,99 @@ function __strip_diff($diff)
 	}
 
 	return $out;
+}
+
+function check_for_matches($p, $cache, $git)
+{
+	$matches = array();
+	foreach ($cache as $commit_id => $subject) {
+		if ($subject == $p->subject && $commit_id != $p->commit_id) {
+			debug($subject." == ".$p->subject);
+			$matches[] = $commit_id;
+		}
+	}
+
+	foreach ($matches as $commit_id) {
+		$commit_id = explode(" ", $commit_id)[0];
+		$dup = new Patch();
+		$dup->parse_from_git($commit_id, $git);
+
+		if ($p->commit_id == $dup->commit_id)
+			continue;
+
+		unset($res);
+		$git->cmd("git diff ".$p->commit_id."~1..".$p->commit_id, $res, $status);
+		$diff1 = __strip_diff($res);
+
+		unset($res);
+		$git->cmd("git diff ".$dup->commit_id."~1..".$dup->commit_id, $res, $status);
+		$diff2 = __strip_diff($res);
+
+		if (strcmp($diff1, $diff2) == 0) {
+			green("Found exact duplicate for ".$p->commit_id." in ".$dup->commit_id);
+		} else {
+			msg($p->commit_id.": ".strlen($diff1));
+			msg($dup->commit_id.": ".strlen($diff2));
+			file_put_contents("/tmp/1", $diff1);
+			file_put_contents("/tmp/2", $diff2);
+			passthru("diff -Naur /tmp/1 /tmp/2");
+			passthru("rm /tmp/1");
+			passthru("rm /tmp/2");
+
+			error("Found non-exact duplicate for ".$p->commit_id." in ".$dup->commit_id);
+		}
+
+		$ask = Util::ask("(A)ccept duplicate or (s)kip: ", array("a", "s"), "a");
+
+		if ($ask == "a")
+			return $dup;
+	}
+
+	return FALSE;
+}
+
+// Check suse repo for commits matching the contents of the provided patch
+function check_for_alt_commits($p, $suse_repo_path, $git)
+{
+	$cache = array();
+
+	unset($files);
+	exec("find ".$suse_repo_path."/patches.suse/", $files);
+
+	$subject_str = "Subject: ";
+	$git_commit_str = "Git-commit: ";
+	$alt_commit_str = "Alt-commit: ";
+
+	foreach ($files as $file) {
+		if (is_dir($file))
+			continue;
+
+		$c = file_get_contents($file);
+		$c = explode(PHP_EOL, $c);
+
+		$ids = array();
+		$subject = FALSE;
+
+		// Collect subject for all Git-commit and Alt-commit tags
+		foreach ($c as $line) {
+			if (strncasecmp($subject_str, $line, strlen($subject_str)) == 0)
+				$subject = substr($line, strlen($subject_str));
+
+			if (strncasecmp($git_commit_str, $line, strlen($git_commit_str)) == 0)
+				$ids[] = substr($line, strlen($git_commit_str));
+
+			if (strncasecmp($alt_commit_str, $line, strlen($alt_commit_str)) == 0)
+				$ids[] = substr($line, strlen($alt_commit_str));
+
+			if (trim($line) == "")
+				break;
+		}
+
+		foreach ($ids as $id)
+			$cache[$id] = $subject;
+	}
+
+	return check_for_matches($p, $cache, $git);
 }
 
 // Check git repo for commits matching the contents of the provided patch
@@ -182,62 +275,20 @@ function check_for_duplicate($p, $git, $backports, $kernel_version)
 		msg("Cached ".count($cache)." commits");
 	}
 
-	debug("Checking for duplicate...");
+	debug("Checking for duplicates...");
 
-	$matches = array();
-	foreach ($cache as $commit_id => $subject) {
-		if ($subject == $p->subject && $commit_id != $p->commit_id) {
-			debug($subject." == ".$p->subject);
-			$matches[] = $commit_id;
-		}
-	}
-
-	if (count($matches) > 1)
-		msg("Found ".count($matches)." potential duplicates");
-
-	foreach ($matches as $commit_id) {
-		$commit_id = explode(" ", $commit_id)[0];
-		$dup = new Patch();
-		$dup->parse_from_git($commit_id, $git);
-
-		if ($p->commit_id == $dup->commit_id)
-			continue;
-
-		unset($res);
-		$git->cmd("git diff ".$p->commit_id."~1..".$p->commit_id, $res, $status);
-		$diff1 = __strip_diff($res);
-
-		unset($res);
-		$git->cmd("git diff ".$dup->commit_id."~1..".$dup->commit_id, $res, $status);
-		$diff2 = __strip_diff($res);
-
-		if (strcmp($diff1, $diff2) == 0) {
-			// We found a full match so no need to look further
-			green("Found exact duplicate in ".$dup->commit_id);
-			return $dup;
-		} else {
-			msg($p->commit_id.": ".strlen($diff1));
-			msg($dup->commit_id.": ".strlen($diff2));
-			file_put_contents("/tmp/1", $diff1);
-			file_put_contents("/tmp/2", $diff2);
-			passthru("diff -Naur /tmp/1 /tmp/2");
-			passthru("rm /tmp/1");
-			passthru("rm /tmp/2");
-
-			error("Found non-exact duplicate in ".$dup->commit_id);
-			$ask = Util::ask("(A)ccept duplicate or (s)kip: ", array("a", "s"), "a");
-
-			if ($ask == "a")
-				return $dup;
-		}
-	}
-
-	return FALSE; 
+	return check_for_matches($p, $cache, $git);
 }
 
 function get_suse_patch_filename($suse_repo_path, $commit_id)
 {
 	exec("cd ".$suse_repo_path."/patches.suse && grep -Rl \"Git-commit: ".$commit_id."\"", $res);
+
+	if (isset($res[0]))
+		return $res[0];
+
+	// We failed to find it so try the Alt-commit tag
+	exec("cd ".$suse_repo_path."/patches.suse && grep -Rl \"Alt-commit: ".$commit_id."\"", $res);
 
 	return $res[0];
 }
@@ -538,8 +589,6 @@ function cmd_suse_fixes($argv, $opts)
 			else
 				msg("The patch failed to apply");
 		} else if ($res != 0) {
-			// Check for obvious Alt-commit
-			$alt_commit = false;
 			$failed_patch = "";
 			$hunk_ok = 0;
 			$hunk_fail = 0;
@@ -553,38 +602,22 @@ function cmd_suse_fixes($argv, $opts)
 						break;
 					}
 				}
-
-				if (trim($line) == "! = Reverting the patch fixes this failure.") {
-					$alt_commit = true;
-					break;
-				}
 			}
 
-
-			if ($alt_commit) {
-				// Find original commit
-				$dup = check_for_duplicate($p, $git, $suse_backports, $kernel_version);
+			if ($failed_patch == "patches.suse/".$filename) {
+				$dup = check_for_alt_commits($p, $suse_repo_path, $git);
 				if ($dup !== FALSE) {
 					// We found an acceptable match
 					$suse_patch_file = get_suse_patch_filename($suse_repo_path, $dup->commit_id);
-					passthru("cd ".$suse_repo_path." && ./scripts/patch-tag ".
-						 "--Add Alt-commit=".$p->commit_id." patches.suse/".
-						 $suse_patch_file, $res_alt);
-					if ($res_alt != 0) {
-						error("FAIL: Failed to add alt-commit tag to file: ".$suse_patch_file);
-						Util::pause();
-						continue;
-					}
+					insert_tags_in_patch($suse_repo_path."/patches.suse/".$suse_patch_file, array("Alt-commit: ".$p->commit_id));
 
 					msg("The patch is an Alt-commit");
 					Util::pause();
 					passthru("cd ".$suse_repo_path." && ./scripts/log", $status);
 					$actually_backported++;
 					continue;
-				} else {
-					error("FAIL: Failed to find an Alt-commit. This is unusual.");
 				}
-			} else if ($failed_patch == "patches.suse/".$filename) {
+
 				$dup = check_for_duplicate($p, $git, $suse_backports, $kernel_version);
 
 				if ($dup !== FALSE) {
@@ -639,8 +672,10 @@ function cmd_suse_fixes($argv, $opts)
 			$mainline = "Queued in subsystem maintainer repo";
 		} else {
 			$mainline = $p->get_mainline_tag($git);
-			if ($mainline === FALSE)
-				fatal("Failed to get mainline tag for commit: ".$hash);
+			if ($mainline === FALSE) {
+				error("SKIP: Failed to get mainline tag for commit: ".$hash);
+				continue;
+			}
 		}
 
 		$tags = array(	"Git-commit: ".$p->commit_id,
