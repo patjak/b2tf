@@ -228,7 +228,12 @@ class Patch {
 		} else if (count($res) == 1) {
 			return $res[0];
 		} else {
-			return FALSE;
+			error("Failed to find mainline tag for: ".$this->commit_id);
+			$mainline = Util::get_line("Enter tag manually or leave empty to skip patch: ");
+			if (trim($mainline) == "")
+				return FALSE;
+			else
+				return $mainline;
 		}
 	}
 }
