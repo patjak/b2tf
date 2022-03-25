@@ -238,6 +238,7 @@ function check_for_alt_commits($p, $suse_repo_path, $git)
 	$subject_str = "Subject: ";
 	$git_commit_str = "Git-commit: ";
 	$alt_commit_str = "Alt-commit: ";
+	$no_fix_str = "No-fix: ";
 
 	foreach ($files as $file) {
 		if (is_dir($file))
@@ -259,6 +260,9 @@ function check_for_alt_commits($p, $suse_repo_path, $git)
 
 			if (strncasecmp($alt_commit_str, $line, strlen($alt_commit_str)) == 0)
 				$ids[] = substr($line, strlen($alt_commit_str));
+
+			if (strncasecmp($no_fix_str, $line, strlen($no_fix_str)) == 0)
+				$ids[] = substr($line, strlen($no_fix_str));
 
 			if (trim($line) == "")
 				break;
