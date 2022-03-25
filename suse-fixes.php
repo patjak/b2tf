@@ -424,7 +424,7 @@ function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
 		error("Failed to get oneline log of commit id: ".$p->commit_id);
 		return;
 	}
-	$oneline = $oneline[0];
+	$oneline = addslashes($oneline[0]);
 
 	exec("cd ".$suse_repo_path." && git add blacklist.conf && git commit -m \"blacklist.conf: ".$oneline."\"", $out, $res);
 
