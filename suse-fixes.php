@@ -103,6 +103,27 @@ function parse_fixes_from_script($lines, $git)
 	return $patches;
 }
 
+function parse_fixes_simple($lines, $git)
+{
+	$patches = array();
+
+	foreach ($lines as $line) {
+		$hashes = explode(" ", $line);
+		foreach ($hashes as $hash) {
+			// Check if hash is valid
+			$res = NULL;
+			$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+
+			if ($status != 0)
+				fatal("Unknown hash: ".$hash);
+			else
+				$patches[] = $hash;
+		}
+	}
+
+	return $patches;
+}
+
 function load_fixes_file($fixes_file, $work_dir, $git)
 {
 	$file = file_get_contents($fixes_file);
@@ -113,7 +134,7 @@ function load_fixes_file($fixes_file, $work_dir, $git)
 	if (isset($opts['file-type'])) {
 		$filetype = get_opt("file-type", $opts);
 	} else {
-		$file_types = array("from-email", "from-script");
+		$file_types = array("from-email", "from-script", "simple");
 		$filetype = Util::ask_from_array($file_types, "Select file-type:", TRUE);
 	}
 
@@ -130,6 +151,8 @@ function load_fixes_file($fixes_file, $work_dir, $git)
 
 	} else if ($filetype == "from-script") {
 		$patches = parse_fixes_from_script($lines, $git);
+	} else if ($filetype == "simple") {
+		$patches = parse_fixes_simple($lines, $git);
 	}
 
 	return $patches;
