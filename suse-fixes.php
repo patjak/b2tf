@@ -507,14 +507,13 @@ function cmd_suse_fixes($argv, $opts)
 		fatal("Couldn't get current branch from ".$suse_repo_path);
 
 	$original_branch = $out[0];
-	$line = Util::get_line("Branch from ".$original_branch." (or stay on current)? [Y/n]? ");
+	$line = Util::get_line("Enter name for new branch (leave empty to stay on ".$original_branch."): ");
 	$line = trim(strtolower($line));
-	if (isset($line[0]) && $line[0] != "y") {
+	if ($line == "") {
 		msg("Continuing on current branch");
 		$branch_name = $original_branch;
 	} else {
-
-		$branch_name = $original_branch."-git-fixes-".date("Y-m-d");
+		$branch_name = $original_branch."-".$line;
 
 		exec("cd ".$suse_repo_path." && git checkout -b ".$branch_name, $out, $res);
 		if ($res != 0)
