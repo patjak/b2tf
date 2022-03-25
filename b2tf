@@ -213,9 +213,12 @@ class Patch {
 	 * @param $git The GitRepo object to use for processing
 	 * @return The tag version of the Patch (ie. v5.4-rc3)
 	 */
-	function get_mainline_tag($git)
+	function get_mainline_tag($git, &$version_list = array())
 	{
 		$git->cmd("git tag --sort=version:refname --contains ".$this->commit_id, $res);
+
+		// Provide a list of all tags containing the commit
+		$version_list = $res;
 
 		if (count($res) > 1) {
 			// Tag version is tricky since eg v5.6 gets sorted before v5.6-rc1

@@ -564,23 +564,36 @@ function cmd_suse_fixes($argv, $opts)
 		$filename = find_valid_filename($filename, $suse_repo_path);
 		$file_dst = $suse_repo_path."/patches.suse/".$filename;
 
-		suse_insert_file($file_src, $file_dst);
+		// Add proper tags to the patch
+		debug("Inserting real tags...");
+		if (isset($repo_tag)) {
+			$mainline = "Queued in subsystem maintainer repo";
+		} else {
+			$mainline = $p->get_mainline_tag($git, $version_list);
+			if ($mainline === FALSE) {
+				error("SKIP: Failed to get mainline tag for commit: ".$hash);
+				continue;
+			}
 
-		// Add fake mainline tag into patch so we can sequence and catch an early fail
-		$fake_mainline = "5.5-rc5";
+			debug("Patch version (".$mainline." <= v".$kernel_version.")");
+			if (in_array("v".$kernel_version, $version_list)) {
+				error("SKIP: Patch is already in base kernel version (".$mainline." < ".$kernel_version.")");
+				continue;
+			}
+		}
+
 		$tags = array(	"Git-commit: ".$p->commit_id,
-				"Patch-mainline: ".$fake_mainline,
+				"Patch-mainline: ".$mainline,
 				"References: ".$refs);
 
 		if (isset($repo_tag))
 			$tags[] = "Git-repo: ".$repo_tag;
 
-		debug("Inserting fake tags in patch: ".$filename);
+		suse_insert_file($file_src, $file_dst);
 		insert_tags_in_patch($file_dst, $tags, $signoff);
 
 		$res = suse_insert_patch($suse_repo_path, $file_dst);
 		$res += suse_sequence_patch($suse_repo_path, $out);
-		undo_insert_and_sequence_patch($suse_repo_path, $filename);
 
 		// If we're working on a non-mainline repo ($repo_tag is set) we cannot do any clever tricks so skip this part
 		if (isset($repo_tag)) {
@@ -607,6 +620,7 @@ function cmd_suse_fixes($argv, $opts)
 			if ($failed_patch == "patches.suse/".$filename) {
 				$dup = check_for_alt_commits($p, $suse_repo_path, $git);
 				if ($dup !== FALSE) {
+					undo_insert_and_sequence_patch($suse_repo_path, $filename);
 					// We found an acceptable match
 					$suse_patch_file = get_suse_patch_filename($suse_repo_path, $dup->commit_id);
 					insert_tags_in_patch($suse_repo_path."/patches.suse/".$suse_patch_file, array("Alt-commit: ".$p->commit_id));
@@ -630,6 +644,7 @@ function cmd_suse_fixes($argv, $opts)
 						continue;
 
 					if ($ask == "b") {
+						undo_insert_and_sequence_patch($suse_repo_path, $filename);
 						$res = suse_blacklist_patch($p, $suse_repo_path, $git, "Duplicate of ".$dup->commit_id.": ".$dup->subject);
 						$actually_backported++;
 						continue;
@@ -646,50 +661,31 @@ function cmd_suse_fixes($argv, $opts)
 			msg("Patch will apply without modifications");
 		}
 
-		// undo_insert_and_sequence_patch($suse_repo_path, $filename);
-		// continue;
-
 		if (!$skip_review) {
 			view_commit($hash, $git);
 			$backport = Util::ask("Backport patch? ([Y]es/[b]lacklist/[s]kip/[a]bort): ", array("y", "b", "s", "a"), "y");
 
-			if ($backport == "a")
+			if ($backport == "a") {
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
 				break;
+			}
 
-			if ($backport == "s")
+			if ($backport == "s") {
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
 				continue;
+			}
 
 			if ($backport == "b") {
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
 				$res = suse_blacklist_patch($p, $suse_repo_path, $git);
 				$actually_backported++;
 				continue;
 			}
 		}
 
-		// At this point we need the real tags
-		debug("Inserting real tags...");
-		if (isset($repo_tag)) {
-			$mainline = "Queued in subsystem maintainer repo";
-		} else {
-			$mainline = $p->get_mainline_tag($git);
-			if ($mainline === FALSE) {
-				error("SKIP: Failed to get mainline tag for commit: ".$hash);
-				continue;
-			}
-		}
-
-		$tags = array(	"Git-commit: ".$p->commit_id,
-				"Patch-mainline: ".$mainline,
-				"References: ".$refs);
-
-		if (isset($repo_tag))
-			$tags[] = "Git-repo: ".$repo_tag;
-
-		suse_insert_file($file_src, $file_dst);
-		insert_tags_in_patch($file_dst, $tags, $signoff);
-		$res = suse_insert_patch($suse_repo_path, $file_dst); // FIXME: We can skip this insert if we keep the fake one
 		$res += suse_sequence_patch($suse_repo_path, $out);
 
+		$ask = "R";
 		while ($res != 0) {
 			error("Failed to sequence the patch");
 			$ask = Util::ask("(R)etry, (s)kip, (b)lacklist or (v)iew again: ", array("r", "s", "b", "v"), "r");
@@ -711,6 +707,9 @@ function cmd_suse_fixes($argv, $opts)
 
 			$res = suse_sequence_patch($suse_repo_path, $out);
 		}
+
+		if ($ask == "b")
+			continue;
 
 		if ($res != 0) {
 			undo_insert_and_sequence_patch($suse_repo_path, $filename);
