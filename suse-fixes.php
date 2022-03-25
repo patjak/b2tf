@@ -233,7 +233,7 @@ function check_for_alt_commits($p, $suse_repo_path, $git)
 	$cache = array();
 
 	unset($files);
-	exec("find ".$suse_repo_path."/patches.suse/", $files);
+	exec("find ".$suse_repo_path."/patches.suse/ | grep -v \"~\"", $files);
 
 	$subject_str = "Subject: ";
 	$git_commit_str = "Git-commit: ";
@@ -305,13 +305,15 @@ function check_for_duplicate($p, $git, $backports, $kernel_version)
 
 function get_suse_patch_filename($suse_repo_path, $commit_id)
 {
-	exec("cd ".$suse_repo_path."/patches.suse && grep -Rl \"Git-commit: ".$commit_id."\"", $res);
+	exec("cd ".$suse_repo_path."/patches.suse && ".
+	     "grep -Rl \"Git-commit: ".$commit_id."\" | grep -v \"~\"", $res);
 
 	if (isset($res[0]))
 		return $res[0];
 
 	// We failed to find it so try the Alt-commit tag
-	exec("cd ".$suse_repo_path."/patches.suse && grep -Rl \"Alt-commit: ".$commit_id."\"", $res);
+	exec("cd ".$suse_repo_path."/patches.suse && ".
+	     "grep -Rl \"Alt-commit: ".$commit_id."\" | grep -v \"~\"", $res);
 
 	return $res[0];
 }
