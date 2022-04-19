@@ -262,6 +262,13 @@ function check_for_alt_commits($p, $suse_repo_path, $git)
 				// Check for multi-line subjects
 				if (isset($c[$i + 1][0]) && $c[$i + 1][0] == " ")
 						$subject .= $c[$i + 1];
+
+				// Strip any prepending [PATCH] tag
+				$subject = trim($subject);
+				if (strncmp($subject, "[PATCH]", strlen("[PATCH]")) == 0)
+					$subject = substr($subject, strlen("[PATCH]"));
+
+				$subject = trim($subject);
 			}
 
 			if (strncasecmp($git_commit_str, $line, strlen($git_commit_str)) == 0)
