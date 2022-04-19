@@ -700,7 +700,7 @@ function cmd_suse_fixes($argv, $opts)
 
 		if (!$skip_review) {
 			view_commit($hash, $git);
-			$backport = Util::ask("Backport patch? ([Y]es/[b]lacklist/[s]kip/[a]bort): ", array("y", "b", "s", "a"), "y");
+			$backport = Util::ask("Backport patch? (Y)es, (b)lacklist, (s)kip or (a)bort: ", array("y", "b", "s", "a"), "y");
 
 			if ($backport == "a") {
 				undo_insert_and_sequence_patch($suse_repo_path, $filename);
@@ -722,10 +722,9 @@ function cmd_suse_fixes($argv, $opts)
 
 		$res += suse_sequence_patch($suse_repo_path, $out);
 
-		$ask = "R";
 		while ($res != 0) {
 			error("Failed to sequence the patch");
-			$ask = Util::ask("(R)etry, (s)kip, (b)lacklist or (v)iew again: ", array("r", "s", "b", "v"), "r");
+			$ask = Util::ask("(R)etry, (s)kip, (b)lacklist, (v)iew again or (a)bort: ", array("r", "s", "b", "v", "a"), "r");
 
 			if ($ask == "v") {
 				view_commit($hash, $git);
@@ -742,11 +741,19 @@ function cmd_suse_fixes($argv, $opts)
 				break;
 			}
 
+			if ($ask == "a") {
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
+				break;
+			}
+
 			$res = suse_sequence_patch($suse_repo_path, $out);
 		}
 
 		if ($ask == "b")
 			continue;
+
+		if ($ask == "a")
+			break;
 
 		if ($res != 0) {
 			undo_insert_and_sequence_patch($suse_repo_path, $filename);
