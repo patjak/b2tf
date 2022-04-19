@@ -230,6 +230,8 @@ function check_for_matches($p, $cache, $git)
 // Check suse repo for commits matching the contents of the provided patch
 function check_for_alt_commits($p, $suse_repo_path, $git)
 {
+	debug("Checking for Alt-commits");
+
 	$cache = array();
 
 	unset($files);
@@ -251,9 +253,16 @@ function check_for_alt_commits($p, $suse_repo_path, $git)
 		$subject = FALSE;
 
 		// Collect subject for all Git-commit and Alt-commit tags
-		foreach ($c as $line) {
-			if (strncasecmp($subject_str, $line, strlen($subject_str)) == 0)
+		for ($i = 0; $i < count($c); $i++) {
+			$line = $c[$i];
+
+			if (strncasecmp($subject_str, $line, strlen($subject_str)) == 0) {
 				$subject = substr($line, strlen($subject_str));
+
+				// Check for multi-line subjects
+				if (isset($c[$i + 1][0]) && $c[$i + 1][0] == " ")
+						$subject .= $c[$i + 1];
+			}
 
 			if (strncasecmp($git_commit_str, $line, strlen($git_commit_str)) == 0)
 				$ids[] = substr($line, strlen($git_commit_str));

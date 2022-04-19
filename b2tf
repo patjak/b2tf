@@ -1,5 +1,6 @@
 #!/usr/bin/php
 <?php
+require_once("storage.php");
 require_once("suse-fixes.php");
 // How long back in commit history we check for cherry picks
 define("CHERRY_PICK_HISTORY", 4000);
@@ -701,14 +702,20 @@ function get_patch_filenames($dir)
 
 function get_opt($name, $opts)
 {
+	$params = Storage::get_parameters();
 	$opt = isset($opts[$name]) ? $opts[$name] : "";
 
 	// Handle defaults
 	if ($opt == "" && $name == "work-dir")
 		return "./";
 
-	if ($opt == "")
+	if ($opt == "") {
+		foreach ($params as $param) {
+			if ($param->name == $name)
+				return $param->value;
+		}
 		fatal("Missing --".$name." <arg>");
+	}
 
 	return $opt;
 }
@@ -1781,6 +1788,23 @@ function parse_options($argv)
 	}
 }
 
+function get_user(&$username, &$fullname, &$path) {
+	exec("whoami", $res);
+	$username = $res[0];
+	exec("getent passwd ".$username, $res);
+	$res = explode(":", $res[1]);
+	$fullname = $res[4];
+	$path = $res[5];
+}
+
+get_user($username, $fullname, $path);
+Storage::$path = $path."/.b2tf.xml";
+Storage::load();
+$params = Storage::get_parameters();
+msg("Loading parameters:");
+foreach ($params as $param) {
+	msg($param->name.":\t".$param->value);
+}
 parse_options($argv);
 
 ?>
