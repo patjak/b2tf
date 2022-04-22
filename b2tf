@@ -1724,6 +1724,7 @@ function parse_options($argv)
 		"fixes-file:",
 		"file-type:",
 		"suse-repo-path:",
+		"only-alt-commits",
 		"debug",
 		);
 

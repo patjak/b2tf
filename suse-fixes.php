@@ -506,6 +506,12 @@ function cmd_suse_fixes($argv, $opts)
 	else
 		$skip_fails = FALSE;
 
+	// Ignore everything that is not alt-commits
+	if (isset($opts['only-alt-commits']))
+		$only_alt_commits = TRUE;
+	else
+		$only_alt_commits = FALSE;
+
 	if (isset($opts['repo-tag']))
 		$repo_tag = get_opt("repo-tag", $opts);
 
@@ -676,6 +682,12 @@ function cmd_suse_fixes($argv, $opts)
 					continue;
 				}
 
+				if ($only_alt_commits) {
+					undo_insert_and_sequence_patch($suse_repo_path, $filename);
+					msg("Not an Alt-commit (skipping)");
+					continue;
+				}
+
 				$dup = check_for_duplicate($p, $git, $suse_backports, $kernel_version);
 
 				if ($dup !== FALSE) {
@@ -702,7 +714,13 @@ function cmd_suse_fixes($argv, $opts)
 				continue;
 			}
 		} else {
-			msg("Patch will apply without modifications");
+			if ($only_alt_commits) {
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
+				msg("Not an Alt-commit (skipping)");
+				continue;
+			} else {
+				msg("Patch will apply without modifications");
+			}
 		}
 
 		if (!$skip_review) {
