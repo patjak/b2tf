@@ -209,6 +209,36 @@ class Patch {
 	}
 
 	/**
+	 * Return the name of the next upcoming release (could be wrong ofc)
+	 *
+	 * @param $git The GitRepo object to use for processing
+	 * @return Release name
+	 */
+	public static function get_next_tagged_release($git)
+	{
+		$git->cmd("git tag --sort=taggerdate | tail -1", $res);
+
+		if (count($res) != 1)
+			return FALSE;
+
+		$tag = $res[0];
+
+		if (strpos($tag, "-rc") === FALSE) {
+			$tag = explode(".", $tag);
+			$major = $tag[0];
+			$minor = (int)$tag[1] + 1;
+			$new_tag = $major.".".$minor;
+			$new_tag .= "-rc1";
+		} else {
+			$rc = explode("-rc", $tag)[1];
+			$new_tag = substr($tag, 0, -strlen($rc));
+			$new_tag .= (int)$rc + 1;
+		}
+
+		return $new_tag;
+	}
+
+	/**
 	 * Parse the mainline tag version of the Patch object
 	 *
 	 * @param $git The GitRepo object to use for processing
@@ -238,11 +268,22 @@ class Patch {
 			return $res[0];
 		} else {
 			error("Failed to find mainline tag for: ".$this->commit_id);
-			$mainline = Util::get_line("Enter tag manually or leave empty to skip patch: ");
-			if (trim($mainline) == "")
+			$next_tag = self::get_next_tagged_release($git);
+			$ask = Util::ask("Use ".$next_tag."? (Y)es, (n)o, (s)kip: ", array("y", "n", "s"), "y");
+
+			if ($ask == "y")
+				return $next_tag;
+
+			if ($ask == "n") {
+				$mainline = Util::get_line("Enter tag manually or leave empty to skip patch: ");
+				if (trim($mainline) == "")
+					return FALSE;
+				else
+					return $mainline;
+			}
+
+			if ($ask == "s")
 				return FALSE;
-			else
-				return $mainline;
 		}
 	}
 }
