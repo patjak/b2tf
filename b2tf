@@ -661,9 +661,12 @@ class GitRepo {
 			$this->cmd("grep -Hn \"<<<<<<\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
+			// Documenation sometimes contains lots of ===== so remove this for now
+			/*
 			$this->cmd("grep -Hn \"======\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
+			*/
 			$this->cmd("grep -Hn \">>>>>>\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
