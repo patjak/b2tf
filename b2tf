@@ -11,6 +11,7 @@ function error($msg) { echo "\e[31m".$msg."\e[0m\n"; }
 function info($msg) { echo "\e[34m".$msg."\e[0m\n"; }
 function green($msg) { echo "\e[32m".$msg."\e[0m\n"; }
 function debug($msg) { if (DEBUG) { echo "\e[33m".$msg."\e[0m\n"; } }
+function debug_git($msg) { if (DEBUG_GIT) { echo "\e[33m".$msg."\e[0m\n"; } }
 function delimiter() { echo "\e[33m----------\e[0m\n"; }
 
 class Util {
@@ -548,7 +549,7 @@ class GitRepo {
 
 	// Run a shell command in the git repository directory
 	public function cmd($cmd, &$output = FALSE, &$status = FALSE) {
-		debug("git cmd: ".$cmd);
+		debug_git("git cmd: ".$cmd);
 		exec("cd ".$this->dir." && ".$cmd, $output, $status);
 	}
 
@@ -1800,6 +1801,11 @@ function parse_options($argv)
 		define("DEBUG", TRUE);
 	else
 		define("DEBUG", FALSE);
+
+	if (isset($options["debug-git"]))
+		define("DEBUG_GIT", TRUE);
+	else
+		define("DEBUG_GIT", FALSE);
 
 	switch($command) {
 	case "setup":
