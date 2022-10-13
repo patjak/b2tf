@@ -1873,7 +1873,7 @@ parse_options($argv);
 
 Usage: <?= $argv[0] ?> <options> <command>
 
-ALL commands require --work-dir to be specified!
+--work-dir will be set to current directory if not specified
 
 Commands:
   setup - Setup all backporting parameters
@@ -1898,3 +1898,13 @@ Commands:
 
   status - Show current status of backport and git repo
 
+  suse-fixes - Automate backport of git-fixes to the SUSE repo
+    --only-alt-commits	- Skip everything except Alt-commits
+    --fixes-file	- provide a file containing commits
+    --
+
+  <ALL>
+    --refs		- Provide contents of the reference tag
+    --signoff		- Provide the contents of the signoff tag
+    --skip-review	- Skip looking at the patch before atempting backport
+    --skip-fails	- Skip patches that do not apply immediately
