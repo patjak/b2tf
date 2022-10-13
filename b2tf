@@ -1233,6 +1233,8 @@ function cmd_rebase($argv, $opts)
 	$range_stop = $log->get_head_tag("range-stop");
 	$git_dir = $log->get_head_tag("git-dir");
 
+	$fix = isset($opts['fix']) ? TRUE : FALSE;
+
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
