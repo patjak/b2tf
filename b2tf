@@ -1536,6 +1536,7 @@ function insert_tags_in_patch($filename, $tags, $signoff = "")
 	if ($data === FALSE)
 		fatal("Failed to open patch file for inserting tags");
 
+	debug("Adding tags to: ".$filename);
 	$data = explode(PHP_EOL, $data);
 
 	// Find appropriate position for tags
@@ -1564,6 +1565,7 @@ function insert_tags_in_patch($filename, $tags, $signoff = "")
 	if ($i == count($data))
 		fatal("Couldn't find subject tag in patch");
 
+	debug("Adding tags: ".print_r($tags, TRUE));
 	array_splice($data, ($i + 1), 0, $tags);
 
 	$data = implode(PHP_EOL, $data);

@@ -386,13 +386,17 @@ function suse_sequence_patch($suse_repo_path, &$out)
 			error("Hunks failed: ".$hunk_fail."/".($hunk_ok + $hunk_fail));
 	}
 
+	// exec("rm -Rf /dev/shm/tmp");
+
 	return $res;
 }
 
 function undo_insert_and_sequence_patch($suse_repo_path, $filename)
 {
 	debug("Undoing insert and sequence patch");
+	debug("Removing patches.suse/".$filename);
 	passthru("rm ".$suse_repo_path."/patches.suse/".$filename);
+	debug("Restoring series.conf");
 	passthru("cd ".$suse_repo_path." && git restore series.conf");
 }
 
