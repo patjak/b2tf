@@ -1369,9 +1369,15 @@ function cmd_status($argv, $opts)
 	$git->change_branch($log);
 
 	$last_commit = $log->get_last_commit();
+	$num_commits = $log->get_num_commits();
+
+	if ($last_commit == FALSE || $num_commits == 0) {
+		echo "No commits exported. Run \"b2tf export\" to start backporting.\n";
+		return;
+	}
+
 	$last_commit = $last_commit[0];
 	$last_num = $log->get_commit_index($last_commit) + 1;
-	$num_commits = $log->get_num_commits();
 
 	echo "Progress ".(round(($last_num / $num_commits) * 100, 0))."% (".$last_num."/".$num_commits." commits)\n";
 
@@ -1396,7 +1402,14 @@ function cmd_status($argv, $opts)
 	if ($git->check_am_session())
 		echo "In AM session on commit:\n";
 	else
-		echo "Not in AM session. Next commit:\n";
+		echo "Not in AM session.\n";
+
+	if ($p === FALSE) {
+		echo "No more patches to backport\n";
+		return;
+	}
+
+	echo "Next commit:\n";
 	echo $p->commit_id." ".$p->subject."\n";
 
 	$unmerged = $git->get_unmerged_paths();
