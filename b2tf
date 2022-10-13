@@ -719,7 +719,7 @@ class GitRepo {
 	}
 
 	public function get_backported_commits($log) {
-		$start = $log->get_head_tag("range-start");
+		$start = $log->get_head_tag("branch-point");
 		$branch = $log->get_head_tag("branch");
 		$this->cmd("git rev-list --reverse ".$start."..".$branch, $res);
 
