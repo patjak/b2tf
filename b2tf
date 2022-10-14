@@ -1788,6 +1788,7 @@ function parse_options($argv)
 		"suse-repo-path:",
 		"only-alt-commits",
 		"debug",
+		"debug-git",
 		);
 
 	$options = getopt("", $opts, $optind);
