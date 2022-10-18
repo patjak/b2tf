@@ -1250,6 +1250,7 @@ function cmd_rebase($argv, $opts)
 	$j = 0;
 	$num_faults = 0;
 	$num_fixed = 0;
+	$upstream_commits = array();
 	foreach ($body as $line) {
 		$i++;
 		$line = explode(" ", $line);
@@ -1269,6 +1270,13 @@ function cmd_rebase($argv, $opts)
 
 		if ($line[1] == "empty")
 			continue;
+
+		if (in_array($p1->commit_id, $upstream_commits)) {
+			error("Commit: ".$p1->commit_id." is already backported. ".
+			"Perhaps you cherry-picked a commit instead of rebasing it?");
+			return;
+		}
+		$upstream_commits[] = $p1->commit_id;
 
 		$p2 = new Patch(); // Backport commit
 		$p2->parse_from_git($line[1], $git);
