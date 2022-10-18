@@ -1381,7 +1381,7 @@ function cmd_status($argv, $opts)
 	$num_commits = $log->get_num_commits();
 
 	if ($last_commit == FALSE || $num_commits == 0) {
-		echo "No commits exported. Run \"b2tf export\" to start backporting.\n";
+		echo "No commits exported or backported. Run \"b2tf export\" and then \"b2tf apply\" to start backporting.\n";
 		return;
 	}
 
