@@ -715,6 +715,7 @@ function cmd_suse_fixes($argv, $opts)
 			msg("The patch failed to apply");
 			if ($skip_fails) {
 				error("SKIP: Skipping fails");
+				undo_insert_and_sequence_patch($suse_repo_path, $filename);
 				continue;
 			}
 		} else {
