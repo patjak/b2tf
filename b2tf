@@ -823,7 +823,7 @@ function cmd_export($argv, $opts)
 
 	exec("mkdir -p ".$work_dir."/patches/");
 	$git->cmd("git format-patch --no-renames --topo-order --keep-subject --no-merges -o ".
-		 $work_dir."/patches/ ".$start."..".$stop." ".$paths);
+		 $work_dir."/patches/ ".$start."..".$stop." -- ".$paths);
 
 	$log->set_body("#         <Upstream commit id>".
 		       "                   <Backported commit id>\n");
@@ -1356,7 +1356,7 @@ function cmd_diffstat($argv, $opts)
 	$git->change_branch($log, $opts);
 
 	$res = FALSE;
-	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
+	$git->cmd("git diff --stat ".$branch." ".$range_stop." -- ".$paths, $res, $status);
 	if ($status != 0)
 		fatal("Failed to diff");
 
@@ -1394,7 +1394,7 @@ function cmd_status($argv, $opts)
 	echo "Progress ".(round(($last_num / $num_commits) * 100, 0))."% (".$last_num."/".$num_commits." commits)\n";
 
 	$res = FALSE;
-	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
+	$git->cmd("git diff --stat ".$branch." ".$range_stop." -- ".$paths, $res, $status);
 	if ($status != 0)
 		fatal("Failed to diff");
 
@@ -1472,7 +1472,7 @@ function cmd_diff($argv, $opts)
 
 	$git->change_branch($log, $opts);
 
-	$git->cmd("git diff ".$branch." ".$range_stop." ".$paths, $res, $status);
+	$git->cmd("git diff ".$branch." ".$range_stop." -- ".$paths, $res, $status);
 	if ($status != 0)
 		fatal("Failed to diff");
 
@@ -1480,7 +1480,7 @@ function cmd_diff($argv, $opts)
 	delimiter();
 
 	$res = FALSE;
-	$git->cmd("git diff --stat ".$branch." ".$range_stop." ".$paths, $res, $status);
+	$git->cmd("git diff --stat ".$branch." ".$range_stop." --  ".$paths, $res, $status);
 	if ($status != 0)
 		fatal("Failed to diff");
 
