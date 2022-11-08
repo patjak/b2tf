@@ -1268,6 +1268,8 @@ function cmd_rebase($argv, $opts)
 		if (strlen($line[1]) != 40 && $line[1] != "empty")
 			continue;
 
+		echo "\rProgress: ".round(($i / count($body) * 100), 0)."%\tRebased: ".$num_fixed;
+
 		$p1 = new Patch(); // Upstream commit
 		$p1->parse_from_git($line[0], $git);
 
@@ -1275,7 +1277,7 @@ function cmd_rebase($argv, $opts)
 			continue;
 
 		if (in_array($p1->commit_id, $upstream_commits)) {
-			error("Commit: ".$p1->commit_id." is already backported. ".
+			error("\nCommit: ".$p1->commit_id." is already backported. ".
 			"Perhaps you cherry-picked a commit instead of rebasing it?");
 			return;
 		}
@@ -1301,10 +1303,10 @@ function cmd_rebase($argv, $opts)
 		debug("In repo\t\t".$p3->commit_id." ".$p3->subject);
 
 		if ($p1->commit_id == $p2->commit_id)
-			fatal("Comparing the same commit. This shouldn't happen!");
+			fatal("\nComparing the same commit. This shouldn't happen!");
 
 		if ($p1->subject != $p2->subject) {
-			error("Commit log is inconsistent at commit: ".$i);
+			error("\nCommit log is inconsistent at commit: ".$i);
 			echo "\t".$p1->commit_id." ".$p1->subject."\n".
 			     "\t".$p2->commit_id." ".$p2->subject."\n";
 			$num_faults++;
@@ -1316,22 +1318,19 @@ function cmd_rebase($argv, $opts)
 			// Check if rebase must have happened
 			if ($p1->subject == $p2->subject && $p1->subject == $p3->subject) {
 				// Looks like a problem we can fix
-				info("Rebasing commit id: ".$p1->commit_id);
+				debug("\nRebasing commit id: ".$p1->commit_id);
 				$log->update_commit($p1->commit_id, $p3->commit_id);
 				$num_fixed++;
 			} else {
-				error("Our commit log is out of sync with git log!");
-				if ($fix == TRUE) {
-					error("Cannot continue, aborting rebase session!");
-					return;
-				}
+				msg("\n\n".$p1->subject."\n".$p1->commit_id);
+				fatal("Our commit log is out of sync with git log!");
 			}
 		}
 
 		$j++;
 	}
 
-	msg("Processed ".$j." commits");
+	msg("\nProcessed ".$j." commits");
 	info("Rebased ".$num_fixed." commits");
 }
 
