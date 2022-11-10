@@ -513,10 +513,12 @@ function cmd_suse_fixes($argv)
 		$skip_fails = FALSE;
 
 	// Ignore everything that is not alt-commits
-	if (isset($opts['only-alt-commits']))
+	if (isset($opts['only-alt-commits'])) {
 		$only_alt_commits = TRUE;
-	else
+		msg("Only backporting Alt-commits");
+	} else {
 		$only_alt_commits = FALSE;
+	}
 
 	if (isset($opts['repo-tag']))
 		$repo_tag = get_opt("repo-tag");
