@@ -1866,16 +1866,7 @@ function parse_options($argv)
 	}
 }
 
-function get_user(&$username, &$fullname, &$path) {
-	exec("whoami", $res);
-	$username = $res[0];
-	exec("getent passwd ".$username, $res);
-	$res = explode(":", $res[1]);
-	$fullname = $res[4];
-	$path = $res[5];
-}
-
-get_user($username, $fullname, $path);
+Util::get_user($username, $fullname, $path);
 Storage::$path = $path."/.b2tf.xml";
 Storage::load();
 $params = Storage::get_parameters();

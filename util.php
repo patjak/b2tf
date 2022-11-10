@@ -68,6 +68,15 @@ class Util {
 		else
 			return "";
 	}
+
+	public static function get_user(&$username, &$fullname, &$path) {
+		exec("whoami", $res);
+		$username = $res[0];
+		exec("getent passwd ".$username, $res);
+		$res = explode(":", $res[1]);
+		$fullname = $res[4];
+		$path = $res[5];
+	}
 };
 
 ?>
