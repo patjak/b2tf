@@ -17,8 +17,6 @@ function debug_git($msg) { if (DEBUG_GIT) { echo "\e[33m".$msg."\e[0m\n"; } }
 function delimiter() { echo "\e[33m----------\e[0m\n"; }
 
 class Globals {
-	static $options;
-
 };
 
 /**
@@ -714,7 +712,7 @@ function get_patch_filenames($dir)
 
 function get_opt($name)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$params = Storage::get_parameters();
 	$opt = isset($opts[$name]) ? $opts[$name] : "";
 
@@ -770,7 +768,7 @@ function launch_editor($unmerged, $p, $log, $git, $opts)
 
 function cmd_export($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -814,9 +812,9 @@ function resolve_conflicts($git, $target_branch)
 
 function cmd_apply($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
-	$force = isset($opts['force']) ? TRUE : FALSE;
+	$force = Options::get("force");
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -963,7 +961,7 @@ function cmd_skip($argv)
 
 function cmd_setup($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 	$branch = get_opt("branch");
 	$branch_point = get_opt("branch-point");
@@ -988,7 +986,7 @@ function cmd_setup($argv)
 
 function cmd_add($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
@@ -1026,7 +1024,7 @@ function cmd_add($argv)
 
 function cmd_restart($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1063,7 +1061,7 @@ function cmd_restart($argv)
 
 function cmd_sanity_check($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 	$fix = isset($opts['fix']) ? TRUE : FALSE;
 
@@ -1203,7 +1201,7 @@ function cmd_sanity_check($argv)
 
 function cmd_rebase($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1316,7 +1314,7 @@ function cmd_rebase($argv)
 
 function cmd_diffstat($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1345,7 +1343,7 @@ function cmd_diffstat($argv)
 
 function cmd_status($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1434,7 +1432,7 @@ function cmd_status($argv)
 
 function cmd_diff($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1470,7 +1468,7 @@ function cmd_diff($argv)
 
 function cmd_postpone($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1494,7 +1492,7 @@ function cmd_postpone($argv)
 
 function cmd_log($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1647,7 +1645,7 @@ function get_suse_blacklists($suse_repo_path)
 
 function cmd_format_suse($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1733,7 +1731,7 @@ function cmd_format_suse($argv)
 
 function cmd_list_cherry_picks($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
@@ -1800,19 +1798,18 @@ function parse_options($argv)
 	$argv = Options::parse($argv, $opts);
 
 	$options = Options::$options;;
-	Globals::$options = $options;
 
 	if (isset($argv[1]))
 		$command = $argv[1];
 	else
 		return;
 
-	if (isset($options["debug"]))
+	if (Options::get("debug"))
 		define("DEBUG", TRUE);
 	else
 		define("DEBUG", FALSE);
 
-	if (isset($options["debug-git"]))
+	if (Options::get("debug-git"))
 		define("DEBUG_GIT", TRUE);
 	else
 		define("DEBUG_GIT", FALSE);
