@@ -484,8 +484,9 @@ function get_kernel_version($suse_repo_path)
  * - If patch just fails, ask for retry or skip
  **/
 
-function cmd_suse_fixes($argv, $opts)
+function cmd_suse_fixes($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$suse_repo_path = get_opt("suse-repo-path", $opts);
 

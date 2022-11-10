@@ -57,6 +57,11 @@ class Util {
 	}
 };
 
+class Globals {
+	static $options;
+
+};
+
 /**
  * A representation of a patch file
  */
@@ -803,8 +808,9 @@ function launch_editor($unmerged, $p, $log, $git, $opts)
 	}
 }
 
-function cmd_export($argv, $opts)
+function cmd_export($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -842,8 +848,9 @@ function cmd_export($argv, $opts)
 	exit();
 }
 
-function cmd_apply($argv, $opts)
+function cmd_apply($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
@@ -986,8 +993,9 @@ function cmd_apply($argv, $opts)
 	exit();
 }
 
-function cmd_setup($argv, $opts)
+function cmd_setup($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$branch = get_opt("branch", $opts);
 	$branch_point = get_opt("branch-point", $opts);
@@ -1010,8 +1018,9 @@ function cmd_setup($argv, $opts)
 	exit(0);
 }
 
-function cmd_add($argv, $opts)
+function cmd_add($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
@@ -1047,8 +1056,9 @@ function cmd_add($argv, $opts)
 	exit(0);
 }
 
-function cmd_restart($argv, $opts)
+function cmd_restart($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1083,8 +1093,9 @@ function cmd_restart($argv, $opts)
 
 }
 
-function cmd_sanity_check($argv, $opts)
+function cmd_sanity_check($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$fix = isset($opts['fix']) ? TRUE : FALSE;
 
@@ -1222,8 +1233,9 @@ function cmd_sanity_check($argv, $opts)
 }
 
 
-function cmd_rebase($argv, $opts)
+function cmd_rebase($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1334,8 +1346,9 @@ function cmd_rebase($argv, $opts)
 	info("Rebased ".$num_fixed." commits");
 }
 
-function cmd_diffstat($argv, $opts)
+function cmd_diffstat($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1362,8 +1375,9 @@ function cmd_diffstat($argv, $opts)
 	echo array_to_str($res);
 }
 
-function cmd_status($argv, $opts)
+function cmd_status($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1450,8 +1464,9 @@ function cmd_status($argv, $opts)
 	echo "\n";
 }
 
-function cmd_diff($argv, $opts)
+function cmd_diff($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1485,8 +1500,9 @@ function cmd_diff($argv, $opts)
 	echo array_to_str($res);
 }
 
-function cmd_postpone($argv, $opts)
+function cmd_postpone($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1508,8 +1524,9 @@ function cmd_postpone($argv, $opts)
 
 }
 
-function cmd_log($argv, $opts)
+function cmd_log($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1660,8 +1677,9 @@ function get_suse_blacklists($suse_repo_path)
 	return $list;
 }
 
-function cmd_format_suse($argv, $opts)
+function cmd_format_suse($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 	$start = get_opt("start", $opts);
 	$stop = get_opt("stop", $opts);
@@ -1738,8 +1756,9 @@ function cmd_format_suse($argv, $opts)
 	file_put_contents($work_dir."/patches.suse/filenames.log", $suse_filenames);
 }
 
-function cmd_list_cherry_picks($argv, $opts)
+function cmd_list_cherry_picks($argv)
 {
+	$opts = Globals::$options;
 	$work_dir = realpath(get_opt("work-dir", $opts));
 
 	$log = new Log();
@@ -1804,6 +1823,7 @@ function parse_options($argv)
 		);
 
 	$options = getopt("", $opts, $optind);
+	Globals::$options = $options;
 
 	if (isset($argv[$optind]))
 		$command = $argv[$optind];
@@ -1822,49 +1842,49 @@ function parse_options($argv)
 
 	switch($command) {
 	case "setup":
-		cmd_setup($argv, $options);
+		cmd_setup($argv);
 		exit(0);
 	case "export":
-		cmd_export($argv, $options);
+		cmd_export($argv);
 		exit(0);
 	case "apply":
-		cmd_apply($argv, $options);
+		cmd_apply($argv);
 		exit(0);
 	case "add":
-		cmd_add($argv, $options);
+		cmd_add($argv);
 		exit(0);
 	case "restart":
-		cmd_restart($argv, $options);
+		cmd_restart($argv);
 		exit(0);
 	case "sanity-check":
-		cmd_sanity_check($argv, $options);
+		cmd_sanity_check($argv);
 		exit(0);
 	case "status":
-		cmd_status($argv, $options);
+		cmd_status($argv);
 		exit(0);
 	case "diffstat":
-		cmd_diffstat($argv, $options);
+		cmd_diffstat($argv);
 		exit(0);
 	case "diff":
-		cmd_diff($argv, $options);
+		cmd_diff($argv);
 		exit(0);
 	case "postpone":
-		cmd_postpone($argv, $options);
+		cmd_postpone($argv);
 		exit(0);
 	case "rebase":
-		cmd_rebase($argv, $options);
+		cmd_rebase($argv);
 		exit(0);
 	case "log":
-		cmd_log($argv, $options);
+		cmd_log($argv);
 		exit(0);
 	case "format-suse":
-		cmd_format_suse($argv, $options);
+		cmd_format_suse($argv);
 		exit(0);
 	case "list-cherry-picks":
-		cmd_list_cherry_picks($argv, $options);
+		cmd_list_cherry_picks($argv);
 		exit(0);
 	case "suse-fixes":
-		cmd_suse_fixes($argv, $options);
+		cmd_suse_fixes($argv);
 		exit(0);
 	}
 }
