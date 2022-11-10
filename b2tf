@@ -768,7 +768,7 @@ function get_opt($name, $opts)
 	return $opt;
 }
 
-function launch_editor($unmerged, $p, $log, $git, $work_dir, $opts)
+function launch_editor($unmerged, $p, $log, $git, $opts)
 {
 	$solutions = "";
 	foreach ($unmerged as $i => $u) {
@@ -781,7 +781,7 @@ function launch_editor($unmerged, $p, $log, $git, $work_dir, $opts)
 
 		// Store the target version of the file (eg git show v5.5:<filename>)
 		$git->cmd("git show ".$log->get_head_tag("Range-stop", $opts).":".$u." | ".
-			"dd of=".$work_dir."/".$solution_name." 2> /dev/null", $output, $status);
+			"dd of=/tmp/".$solution_name." 2> /dev/null", $output, $status);
 
 		// Add the entire path to modified files
 		$u = $git->get_dir()."/".$u;
@@ -797,9 +797,9 @@ function launch_editor($unmerged, $p, $log, $git, $work_dir, $opts)
 		}
 
 		// Open vim with all the relevant files
-		passthru("vim -O ".$line_no." ".$u." ".$work_dir."/".$solution_name." ".$p->filename." 2> /dev/null");
+		passthru("vim -O ".$line_no." ".$u." /tmp/".$solution_name." ".$p->filename." 2> /dev/null");
 
-		exec("rm ".$work_dir."/".$solution_name);
+		exec("rm /tmp/".$solution_name);
 	}
 }
 
@@ -879,7 +879,7 @@ function cmd_apply($argv, $opts)
 
 			if (count($unmerged) > 0 || count($unstaged) > 0) {
 				error("Repository contains unmerged/unstaged paths. Solve conflict before continuing.");
-				launch_editor($unmerged, $p, $log, $git, $work_dir, $opts);
+				launch_editor($unmerged, $p, $log, $git, $opts);
 
 				// If all conflicts are fixed we automatically add them
 				// User can also force the changes even with conflicts by adding the --force option
@@ -947,7 +947,7 @@ function cmd_apply($argv, $opts)
 			echo "Fix conflict and rerun apply.\n";
 			info("(IMPORTANT! Do NOT run: git am --continue)");
 
-			launch_editor($unmerged, $p, $log, $git, $work_dir, $opts);
+			launch_editor($unmerged, $p, $log, $git, $opts);
 
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE) {
