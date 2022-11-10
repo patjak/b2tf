@@ -126,6 +126,7 @@ function parse_fixes_simple($lines, $git)
 
 function load_fixes_file($fixes_file, $work_dir, $git)
 {
+	$opts = Globals::$options;
 	$file = file_get_contents($fixes_file);
 	if ($file === FALSE)
 		fatal("Failed to open fixes file: ".$fixes_file);
