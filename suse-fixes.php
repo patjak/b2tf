@@ -806,23 +806,10 @@ function cmd_suse_fixes($argv)
 		$actually_backported++;
 	}
 
-	if ($actually_backported == 0) {
-		if ($original_branch != $branch_name) {
-			msg("\nNothing got backported. Removing the emtpy branch we created.");
-			passthru("cd ".$suse_repo_path." && git checkout ".$original_branch, $res);
-			if ($res != 0)
-				fatal("Failed to return to original branch");
-
-			passthru("cd ".$suse_repo_path." && git branch -d ".$branch_name, $res);
-
-			if ($res != 0)
-				fatal("Failed to remove backport branch (should be empty but is not)");
-		} else {
-			msg("\nNothing got backported. Staying on current branch.");
-		}
-	} else {
+	if ($actually_backported == 0)
+		msg("\nNothing got backported.");
+	else
 		green("\nBackport of ".$actually_backported." patches finished successfully");
-	}
 }
 
 ?>
