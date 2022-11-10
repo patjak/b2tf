@@ -41,6 +41,33 @@ class Util {
 	public static function pause() {
 		self::get_line("--- press enter to continue ---");
 	}
+
+	// Returns the remains of the string after first occurance of token
+	public static function parse_after($token, $str) {
+		if (strpos($str, $token) === FALSE)
+			return FALSE;
+
+		$remains = explode($token, $str);
+		if (count($remains) > 1) {
+			array_shift($remains);
+			return implode($token, $remains);
+		}
+
+		return "";
+	}
+
+	// Returns string leading up to first occurance of token
+	public static function parse_before($token, $str) {
+		if (strpos($str, $token) === FALSE)
+			return FALSE;
+
+		$before = explode($token, $str);
+
+		if (count($before) > 1)
+			return $before[0];
+		else
+			return "";
+	}
 };
 
 ?>
