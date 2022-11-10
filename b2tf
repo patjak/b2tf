@@ -1397,14 +1397,13 @@ function cmd_status($argv, $opts)
 	if ($status != 0)
 		fatal("Failed to diff");
 
-	$last_line = count($res) - 1;
-	msg(trim($res[$last_line])."\n");
-
-
 	if ($last_num >= $num_commits) {
 		msg("Backport is done!");
 		return;
 	}
+
+	$last_line = count($res) - 1;
+	msg(trim($res[$last_line])."\n");
 
 	$next_commit = $log->get_next_commit();
 	$patches = Patch::get_patches($work_dir."/patches");
