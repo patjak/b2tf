@@ -17,6 +17,7 @@ function debug_git($msg) { if (DEBUG_GIT) { echo "\e[33m".$msg."\e[0m\n"; } }
 function delimiter() { echo "\e[33m----------\e[0m\n"; }
 
 class Globals {
+	public static $log = FALSE;
 };
 
 /**
@@ -344,12 +345,11 @@ class Log {
 
 		$head = explode(PHP_EOL, $this->get_head());
 
-		foreach($head as $line) {
+		foreach($head as $line)
 			$this->get_tag($line, $tag.": ", $res);
-		}
 
 		if ($res == NULL)
-			return get_opt($tag);
+			return FALSE;
 		
 		return $res;
 	}
@@ -771,8 +771,7 @@ function cmd_export($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$start = $log->get_head_tag("range-start");
 	$stop = $log->get_head_tag("range-stop");
@@ -816,8 +815,7 @@ function cmd_apply($argv)
 	$work_dir = realpath(get_opt("work-dir"));
 	$force = Options::get("force");
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	$git_dir = $log->get_head_tag("git-dir");
@@ -970,7 +968,7 @@ function cmd_setup($argv)
 	$git_dir = realpath(get_opt("git-dir"));
 	$paths = get_opt("paths");
 
-	$log = new Log();
+	$log = Globals::$log;
 	$log->append_head("Range-start: ".$range_start."\n");
 	$log->append_head("Range-stop: ".$range_stop."\n");
 	$log->append_head("Branch: ".$branch."\n");
@@ -990,8 +988,7 @@ function cmd_add($argv)
 	$work_dir = realpath(get_opt("work-dir"));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1027,8 +1024,7 @@ function cmd_restart($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$git_dir = $log->get_head_tag("git-dir");
 
@@ -1065,8 +1061,7 @@ function cmd_sanity_check($argv)
 	$work_dir = realpath(get_opt("work-dir"));
 	$fix = isset($opts['fix']) ? TRUE : FALSE;
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1204,8 +1199,7 @@ function cmd_rebase($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1317,8 +1311,7 @@ function cmd_diffstat($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1346,8 +1339,7 @@ function cmd_status($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$range_stop = $log->get_head_tag("range-stop");
 	$paths = $log->get_head_tag("paths");
@@ -1435,8 +1427,7 @@ function cmd_diff($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1471,8 +1462,7 @@ function cmd_postpone($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$git_dir = $log->get_head_tag("git-dir");
 
@@ -1495,8 +1485,7 @@ function cmd_log($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1648,8 +1637,7 @@ function cmd_format_suse($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$start = $log->get_head_tag("range-start");
 
@@ -1734,8 +1722,7 @@ function cmd_list_cherry_picks($argv)
 	$opts = Options::$options;
 	$work_dir = realpath(get_opt("work-dir"));
 
-	$log = new Log();
-	$log->load($work_dir."/commits.log");
+	$log = Globals::$log;
 
 	$branch = $log->get_head_tag("branch");
 	if ($branch == "")
@@ -1814,6 +1801,17 @@ function parse_options($argv)
 	else
 		define("DEBUG_GIT", FALSE);
 
+	// Commands that don't require the log file
+	switch ($command) {
+	case "suse-fixes":
+		cmd_suse_fixes($argv);
+		exit(0);
+	}
+
+	$work_dir = Options::get("work-dir");
+	Options::$log->load($work_dir."/commits.log");
+
+	// Commands that require the log file
 	switch($command) {
 	case "setup":
 		cmd_setup($argv);
@@ -1857,20 +1855,13 @@ function parse_options($argv)
 	case "list-cherry-picks":
 		cmd_list_cherry_picks($argv);
 		exit(0);
-	case "suse-fixes":
-		cmd_suse_fixes($argv);
-		exit(0);
 	}
 }
 
+Globals::$log = new Log();
 Util::get_user($username, $fullname, $path);
 Storage::$path = $path."/.b2tf.xml";
 Storage::load();
-$params = Storage::get_parameters();
-msg("Loading parameters:");
-foreach ($params as $param) {
-	msg($param->name.":\t".$param->value);
-}
 parse_options($argv);
 
 ?>
