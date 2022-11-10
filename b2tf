@@ -310,7 +310,7 @@ class Log {
 		$this->filename = $filename;
 		$tmp = file_get_contents($filename);
 		if ($tmp === FALSE || strlen($tmp) == 0)
-			return FALSE;
+			fatal("Failed to open ".$filename);
 
 		$tmp = explode("---".PHP_EOL, $tmp);
 		$this->head = $tmp[0];
