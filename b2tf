@@ -392,7 +392,7 @@ class Log {
 		}
 
 		if ($res == NULL)
-			return get_opt($tag, $opts);
+			return get_opt($tag);
 		
 		return $res;
 	}
@@ -753,8 +753,9 @@ function get_patch_filenames($dir)
 	return $files;
 }
 
-function get_opt($name, $opts)
+function get_opt($name)
 {
+	$opts = Globals::$options;
 	$params = Storage::get_parameters();
 	$opt = isset($opts[$name]) ? $opts[$name] : "";
 
@@ -811,7 +812,7 @@ function launch_editor($unmerged, $p, $log, $git, $opts)
 function cmd_export($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -848,10 +849,14 @@ function cmd_export($argv)
 	exit();
 }
 
+function resolve_conflicts($git, $target_branch)
+{
+}
+
 function cmd_apply($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
 	$log = new Log();
@@ -993,16 +998,20 @@ function cmd_apply($argv)
 	exit();
 }
 
+function cmd_skip($argv)
+{
+}
+
 function cmd_setup($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
-	$branch = get_opt("branch", $opts);
-	$branch_point = get_opt("branch-point", $opts);
-	$range_start = get_opt("start", $opts);
-	$range_stop = get_opt("stop", $opts);
-	$git_dir = realpath(get_opt("git-dir", $opts));
-	$paths = get_opt("paths", $opts);
+	$work_dir = realpath(get_opt("work-dir"));
+	$branch = get_opt("branch");
+	$branch_point = get_opt("branch-point");
+	$range_start = get_opt("start");
+	$range_stop = get_opt("stop");
+	$git_dir = realpath(get_opt("git-dir"));
+	$paths = get_opt("paths");
 
 	$log = new Log();
 	$log->append_head("Range-start: ".$range_start."\n");
@@ -1021,7 +1030,7 @@ function cmd_setup($argv)
 function cmd_add($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 	$force = isset($opts['force']) ? TRUE : FALSE;
 
 	$log = new Log();
@@ -1059,7 +1068,7 @@ function cmd_add($argv)
 function cmd_restart($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1096,7 +1105,7 @@ function cmd_restart($argv)
 function cmd_sanity_check($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 	$fix = isset($opts['fix']) ? TRUE : FALSE;
 
 	$log = new Log();
@@ -1236,7 +1245,7 @@ function cmd_sanity_check($argv)
 function cmd_rebase($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1349,7 +1358,7 @@ function cmd_rebase($argv)
 function cmd_diffstat($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1378,7 +1387,7 @@ function cmd_diffstat($argv)
 function cmd_status($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1467,7 +1476,7 @@ function cmd_status($argv)
 function cmd_diff($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1503,7 +1512,7 @@ function cmd_diff($argv)
 function cmd_postpone($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1527,7 +1536,7 @@ function cmd_postpone($argv)
 function cmd_log($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
@@ -1759,7 +1768,7 @@ function cmd_format_suse($argv)
 function cmd_list_cherry_picks($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");

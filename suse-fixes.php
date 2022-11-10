@@ -132,7 +132,7 @@ function load_fixes_file($fixes_file, $work_dir, $git)
 	$lines = explode(PHP_EOL, $file);
 
 	if (isset($opts['file-type'])) {
-		$filetype = get_opt("file-type", $opts);
+		$filetype = get_opt("file-type");
 	} else {
 		$file_types = array("from-email", "from-script", "simple");
 		$filetype = Util::ask_from_array($file_types, "Select file-type:", TRUE);
@@ -141,7 +141,7 @@ function load_fixes_file($fixes_file, $work_dir, $git)
 	// Figure out which release we want to work on
 	if ($filetype == "from-email") {
 		if (isset($opts['release']))
-			$release = get_opt("release", $opts);
+			$release = get_opt("release");
 		else
 			$release = figure_out_release($lines);
 
@@ -487,16 +487,16 @@ function get_kernel_version($suse_repo_path)
 function cmd_suse_fixes($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
-	$suse_repo_path = get_opt("suse-repo-path", $opts);
+	$work_dir = realpath(get_opt("work-dir"));
+	$suse_repo_path = get_opt("suse-repo-path");
 
 	if (isset($opts['refs']))
-		$refs = get_opt("refs", $opts);
+		$refs = get_opt("refs");
 	else
 		$refs = "git-fixes";
 
 	if (isset($opts['fixes-file']))
-		$fixes_file = realpath(get_opt("fixes-file", $opts));
+		$fixes_file = realpath(get_opt("fixes-file"));
 	else
 		$fixes_file = FALSE;
 
@@ -518,11 +518,11 @@ function cmd_suse_fixes($argv)
 		$only_alt_commits = FALSE;
 
 	if (isset($opts['repo-tag']))
-		$repo_tag = get_opt("repo-tag", $opts);
+		$repo_tag = get_opt("repo-tag");
 
-	$signoff = get_opt("signoff", $opts);
+	$signoff = get_opt("signoff");
 
-	$git_dir = realpath(get_opt("git-dir", $opts));
+	$git_dir = realpath(get_opt("git-dir"));
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
