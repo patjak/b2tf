@@ -1540,7 +1540,7 @@ function cmd_log($argv, $opts)
 	}
 }
 
-function insert_tags_in_patch($filename, $tags, $signoff = "")
+function insert_tags_in_patch($filename, $tags, $signature = "")
 {
 	$data = file_get_contents($filename);
 	if ($data === FALSE)
@@ -1580,10 +1580,13 @@ function insert_tags_in_patch($filename, $tags, $signoff = "")
 
 	$data = implode(PHP_EOL, $data);
 
-	// Add signoff tag
-	if ($signoff != "") {
+	// Add signature tag
+	if ($signature != "") {
 		$data = explode(PHP_EOL."---".PHP_EOL, $data);
-		$data[0] = $data[0].PHP_EOL."Signed-off-by: ".$signoff;
+
+		// SUSE kernel-source wants an Acked-by instead of a Signed-off-by
+		$data[0] = $data[0].PHP_EOL."Acked-by: ".$signature;
+
 		$data = implode(PHP_EOL."---".PHP_EOL, $data);
 	}
 
@@ -1591,7 +1594,7 @@ function insert_tags_in_patch($filename, $tags, $signoff = "")
 
 }
 
-function suse_format_patch($p1, $p2, $signoff, $refs, $git)
+function suse_format_patch($p1, $p2, $signature, $refs, $git)
 {
 	$mainline = $p2->get_mainline_tag($git);
 	if ($mainline === FALSE)
@@ -1601,7 +1604,7 @@ function suse_format_patch($p1, $p2, $signoff, $refs, $git)
 			"Patch-mainline: ".$mainline,
 			"References: ".$refs);
 
-	insert_tags_in_patch($p1->filename, $tags, $signoff);
+	insert_tags_in_patch($p1->filename, $tags, $signature);
 }
 
 // Create a list of all backported patches from the suse repo (to check for duplicates)
@@ -1721,7 +1724,7 @@ function cmd_format_suse($argv, $opts)
 			if ($p1->subject != $p2->subject)
 				error("Subject not matching\n".$p1->subject." != ".$p2->subject);
 
-			suse_format_patch($p_file, $p2, $signoff, $refs, $git);
+			suse_format_patch($p_file, $p2, $signature, $refs, $git);
 			msg("(".($j + 1)."/".count($patches).") ".$p2->commit_id." ".$p2->subject);
 
 			$suse_filenames .= "patches.suse/".basename($p_file->filename)." ";
@@ -1784,7 +1787,7 @@ function parse_options($argv)
 		"work-dir:",
 		"git-dir:",
 		"paths:",
-		"signoff:",
+		"signature:",
 		"skip-review",
 		"skip-fails",
 		"refs:",
@@ -1921,6 +1924,6 @@ Commands:
 
   <ALL>
     --refs		- Provide contents of the reference tag
-    --signoff		- Provide the contents of the signoff tag
+    --signature		- Provide the contents of the signature tag
     --skip-review	- Skip looking at the patch before atempting backport
     --skip-fails	- Skip patches that do not apply immediately
