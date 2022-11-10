@@ -734,14 +734,14 @@ function cmd_suse_fixes($argv)
 
 		if (!$skip_review) {
 			view_commit($hash, $git);
-			$backport = Util::ask("Backport patch? (Y)es, (b)lacklist, (s)kip or (a)bort: ", array("y", "b", "s", "a"), "y");
+			$backport = Util::ask("Backport patch? (Y)es, (n)o, (b)lacklist or (a)bort: ", array("y", "b", "n", "a"), "y");
 
 			if ($backport == "a") {
 				undo_insert_and_sequence_patch($suse_repo_path, $filename);
 				break;
 			}
 
-			if ($backport == "s") {
+			if ($backport == "n") {
 				undo_insert_and_sequence_patch($suse_repo_path, $filename);
 				continue;
 			}
@@ -783,10 +783,10 @@ function cmd_suse_fixes($argv)
 			$res = suse_sequence_patch($suse_repo_path, $out);
 		}
 
-		if ($ask == "b")
+		if (isset($ask) && $ask == "b")
 			continue;
 
-		if ($ask == "a")
+		if (isset($ask) && $ask == "a")
 			break;
 
 		if ($res != 0) {
