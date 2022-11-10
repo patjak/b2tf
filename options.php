@@ -52,11 +52,39 @@ class Options {
 		return array_values($argv);
 	}
 
+	/**
+	 * Read an option provided by the user
+	 *
+	 * Options are first read from the command line.
+	 * Secondly from the commits.log file
+	 * Lastly from the users b2tf.xml config file
+	 * Otherwise we return FALSE
+	 *
+	 * @param $opt	Name of the option to retrieve
+	 */
 	public static function get($opt) {
+
+		// Check the command line
 		if (isset(self::$options[$opt]))
 			return self::$options[$opt];
-		else
-			return FALSE;
+
+		// Try the commit log
+		$val = Globals::$log->get_head_tag($opt);
+		if ($val !== FALSE)
+			return $val;
+
+		// As a last resort, look in the users config file
+		$params = Storage::get_parameters();
+		foreach ($params as $param) {
+			if ($param->name == $opt)
+				return $param->value;
+		}
+
+		// Handle defaults
+		if ($opt == "work-dir" || $opt == "git-dir")
+			return realpath("./");
+
+		return FALSE;
 	}
 };
 
