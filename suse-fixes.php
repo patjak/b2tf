@@ -795,7 +795,11 @@ function cmd_suse_fixes($argv)
 		}
 
 		green("Patch applied successfully");
-		Util::pause();
+		$ask = Util::ask("Review final patch? (Y)es or (n)o: ", array("y", "n"), "y");
+		if ($ask == "y")
+			passthru("tig < ".$suse_repo_path."/patches.suse/".$filename);
+
+		msg("Committing...");
 		passthru("cd ".$suse_repo_path." && git add patches.suse/".$filename, $res);
 		passthru("cd ".$suse_repo_path." && ./scripts/log", $res);
 
