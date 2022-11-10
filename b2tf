@@ -649,7 +649,7 @@ class GitRepo {
 			return FALSE;
 	}
 
-	function check_for_cherry_pick($log, $p, $opts)
+	function check_for_cherry_pick($log, $p)
 	{
 		// Check if patch is already cherry picked
 		$range_start = $log->get_head_tag("range-start");
@@ -896,7 +896,7 @@ function cmd_apply($argv)
 			// Save git am output to file so we can show it in edit (vim, emacs, etc.)
 			file_put_contents($work_dir."/output.tmp", array_to_str($output_am));
 
-			$cherry_id = $git->check_for_cherry_pick($log, $p, $opts);
+			$cherry_id = $git->check_for_cherry_pick($log, $p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
@@ -931,7 +931,7 @@ function cmd_apply($argv)
 
 		// Patch might not have introduced changes thus did not get applied (not needed)
 		if ($old_id == $new_id) {
-			$cherry_id = $git->check_for_cherry_pick($log, $p, $opts);
+			$cherry_id = $git->check_for_cherry_pick($log, $p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
