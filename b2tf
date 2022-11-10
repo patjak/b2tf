@@ -1689,29 +1689,36 @@ function get_suse_blacklists($suse_repo_path)
 function cmd_format_suse($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir", $opts));
-	$start = get_opt("start", $opts);
-	$stop = get_opt("stop", $opts);
-	$signoff = get_opt("signoff", $opts);
-	$refs = get_opt("refs", $opts);
-	$suse_repo_path = get_opt("suse-repo-path", $opts);
+	$work_dir = realpath(get_opt("work-dir"));
 
 	$log = new Log();
 	$log->load($work_dir."/commits.log");
 
-	$branch = $log->get_head_tag("branch");
+	$start = $log->get_head_tag("range-start", $opts);
+
+	// Stop in this context is the tip of the branch and not range-stop
+	$stop = $log->get_head_tag("branch", $opts);
+
+	$signature = $log->get_head_tag("signature", $opts);
+	$refs = $log->get_head_tag("refs", $opts);
+	$suse_repo_path = $log->get_head_tag("suse-repo-path", $opts);
+	$git_dir = $log->get_head_tag("git-dir", $opts);
+
+	msg("start:\t\t".$start);
+	msg("stop:\t\t".$stop);
+	msg("signature:\t".$signature);
+	msg("refs:\t\t".$refs);
+
+	$branch = $log->get_head_tag("branch", $opts);
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
 	$suse_backports = get_suse_backports($suse_repo_path);
 
-	// $start = $log->get_head_tag("range-start");
-	$git_dir = $log->get_head_tag("git-dir");
-
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
-	$git->change_branch($log);
+	$git->change_branch($log, $opts);
 
 	exec("mkdir -p ".$work_dir."/patches.suse");
 	exec("rm ".$work_dir."/patches.suse/*");
