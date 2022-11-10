@@ -579,9 +579,9 @@ class GitRepo {
 
 	// Switch to a different git branch
 	public function change_branch($log) {
-		$range_start = $log->get_head_tag("range-start");
-		$branch = $log->get_head_tag("branch");
-		$branch_point = $log->get_head_tag("branch-point");
+		$range_start = Options::get("range-start");
+		$branch = Options::get("branch");
+		$branch_point = Options::get("branch-point");
 
 		if ($branch == "")
 			fatal("Invalid branch. Did you run setup properly?");
@@ -652,7 +652,7 @@ class GitRepo {
 	function check_for_cherry_pick($log, $p)
 	{
 		// Check if patch is already cherry picked
-		$range_start = $log->get_head_tag("range-start");
+		$range_start = Options::get("range-start");
 		$this->cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
 			   "..".$range_start." -n1 --oneline --grep=\"cherry picked from commit ".
 			   $p->commit_id."\"", $res);
@@ -684,8 +684,8 @@ class GitRepo {
 	}
 
 	public function get_backported_commits($log) {
-		$start = $log->get_head_tag("branch-point");
-		$branch = $log->get_head_tag("branch");
+		$start = Options::get("branch-point");
+		$branch = Options::get("branch");
 		$this->cmd("git rev-list --reverse ".$start."..".$branch, $res);
 
 		return $res;
@@ -731,7 +731,7 @@ function get_opt($name)
 	return $opt;
 }
 
-function launch_editor($unmerged, $p, $log, $git, $opts)
+function launch_editor($unmerged, $p, $log, $git)
 {
 	$solutions = "";
 	foreach ($unmerged as $i => $u) {
@@ -743,7 +743,7 @@ function launch_editor($unmerged, $p, $log, $git, $opts)
 		$solution_name = "solution-tmp".$file_ext;
 
 		// Store the target version of the file (eg git show v5.5:<filename>)
-		$git->cmd("git show ".$log->get_head_tag("Range-stop").":".$u." | ".
+		$git->cmd("git show ".Options::get("Range-stop").":".$u." | ".
 			"dd of=/tmp/".$solution_name." 2> /dev/null", $output, $status);
 
 		// Add the entire path to modified files
@@ -768,15 +768,13 @@ function launch_editor($unmerged, $p, $log, $git, $opts)
 
 function cmd_export($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
-
+	$work_dir = Options::get("work-dir");
 	$log = Globals::$log;
 
-	$start = $log->get_head_tag("range-start");
-	$stop = $log->get_head_tag("range-stop");
-	$git_dir = $log->get_head_tag("git-dir");
-	$paths = $log->get_head_tag("paths");
+	$start = Options::get("range-start");
+	$stop = Options::get("range-stop");
+	$git_dir = Options::get("git-dir");
+	$paths = Options::get("paths");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -811,15 +809,14 @@ function resolve_conflicts($git, $target_branch)
 
 function cmd_apply($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 	$force = Options::get("force");
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
-	$git_dir = $log->get_head_tag("git-dir");
-	$range_start = $log->get_head_tag("range-start");
+	$branch = Options::get("branch");
+	$git_dir = Options::get("git-dir");
+	$range_start = Options::get("range-start");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -846,17 +843,17 @@ function cmd_apply($argv)
 
 			if (count($unmerged) > 0 || count($unstaged) > 0) {
 				error("Repository contains unmerged/unstaged paths. Solve conflict before continuing.");
-				launch_editor($unmerged, $p, $log, $git, $opts);
+				launch_editor($unmerged, $p, $log, $git);
 
 				// If all conflicts are fixed we automatically add them
 				// User can also force the changes even with conflicts by adding the --force option
 				if ($git->check_for_conflicts() == FALSE) {
-					cmd_add($argv, $opts);
+					cmd_add($argv);
 				} else {
 					error("Unmerged paths still contain conflicts");
 					if ($force == TRUE) {
 						info("Force adding since --force was specified. Rerun apply to continue.");
-						cmd_add($argv, $opts);
+						cmd_add($argv);
 					} else {
 						msg("Add option --force to add all files anyway");
 					}
@@ -914,11 +911,11 @@ function cmd_apply($argv)
 			echo "Fix conflict and rerun apply.\n";
 			info("(IMPORTANT! Do NOT run: git am --continue)");
 
-			launch_editor($unmerged, $p, $log, $git, $opts);
+			launch_editor($unmerged, $p, $log, $git);
 
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE) {
-				cmd_add($argv, $opts);
+				cmd_add($argv);
 				exit(0);
 			} else {
 				error("Unmerged paths still contain conflicts");
@@ -959,14 +956,13 @@ function cmd_skip($argv)
 
 function cmd_setup($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
-	$branch = get_opt("branch");
-	$branch_point = get_opt("branch-point");
-	$range_start = get_opt("start");
-	$range_stop = get_opt("stop");
-	$git_dir = realpath(get_opt("git-dir"));
-	$paths = get_opt("paths");
+	$work_dir = Options::get("work-dir");
+	$branch = Options::get("branch");
+	$branch_point = Options::get("branch-point");
+	$range_start = Options::get("start");
+	$range_stop = Options::get("stop");
+	$git_dir = Options::get("git-dir");
+	$paths = Options::get("paths");
 
 	$log = Globals::$log;
 	$log->append_head("Range-start: ".$range_start."\n");
@@ -984,17 +980,16 @@ function cmd_setup($argv)
 
 function cmd_add($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
-	$force = isset($opts['force']) ? TRUE : FALSE;
+	$work_dir = Options::get("work-dir");
+	$force = Options::get("force", FALSE);
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$git_dir = $log->get_head_tag("git-dir");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1021,18 +1016,17 @@ function cmd_add($argv)
 
 function cmd_restart($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$git_dir = $log->get_head_tag("git-dir");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
 	$git->change_branch($log);
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 
 	if ($git->check_am_session()) {
 		$git->cmd("git am --abort");
@@ -1057,19 +1051,18 @@ function cmd_restart($argv)
 
 function cmd_sanity_check($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
-	$fix = isset($opts['fix']) ? TRUE : FALSE;
+	$work_dir = Options::get("work-dir");
+	$fix = Options::get('fix', FALSE);
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$range_start = $log->get_head_tag("range-start");
-	$range_stop = $log->get_head_tag("range-stop");
-	$git_dir = $log->get_head_tag("git-dir");
+	$range_start = Options::get("range-start");
+	$range_stop = Options::get("range-stop");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1196,20 +1189,19 @@ function cmd_sanity_check($argv)
 
 function cmd_rebase($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$range_start = $log->get_head_tag("range-start");
-	$range_stop = $log->get_head_tag("range-stop");
-	$git_dir = $log->get_head_tag("git-dir");
+	$range_start = Options::get("range-start");
+	$range_stop = Options::get("range-stop");
+	$git_dir = Options::get("git-dir");
 
-	$fix = isset($opts['fix']) ? TRUE : FALSE;
+	$fix = Options::get("fix", FALSE);
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1308,18 +1300,17 @@ function cmd_rebase($argv)
 
 function cmd_diffstat($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$range_stop = $log->get_head_tag("range-stop");
-	$paths = $log->get_head_tag("paths");
-	$git_dir = $log->get_head_tag("git-dir");
+	$range_stop = Options::get("range-stop");
+	$paths = Options::get("paths");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1336,15 +1327,14 @@ function cmd_diffstat($argv)
 
 function cmd_status($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$range_stop = $log->get_head_tag("range-stop");
-	$paths = $log->get_head_tag("paths");
-	$git_dir = $log->get_head_tag("git-dir");
-	$branch = $log->get_head_tag("branch");
+	$range_stop = Options::get("range-stop");
+	$paths = Options::get("paths");
+	$git_dir = Options::get("git-dir");
+	$branch = Options::get("branch");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1424,18 +1414,17 @@ function cmd_status($argv)
 
 function cmd_diff($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$range_stop = $log->get_head_tag("range-stop");
-	$paths = $log->get_head_tag("paths");
-	$git_dir = $log->get_head_tag("git-dir");
+	$range_stop = Options::get("range-stop");
+	$paths = Options::get("paths");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1459,12 +1448,11 @@ function cmd_diff($argv)
 
 function cmd_postpone($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$git_dir = $log->get_head_tag("git-dir");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1475,23 +1463,22 @@ function cmd_postpone($argv)
 		$git->cmd("git am --abort");
 	}
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	$git->change_branch();
 
 }
 
 function cmd_log($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$git_dir = $log->get_head_tag("git-dir");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1634,27 +1621,26 @@ function get_suse_blacklists($suse_repo_path)
 
 function cmd_format_suse($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$start = $log->get_head_tag("range-start");
+	$start = Options::get("range-start");
 
 	// Stop in this context is the tip of the branch and not range-stop
-	$stop = $log->get_head_tag("branch");
+	$stop = Options::get("branch");
 
-	$signature = $log->get_head_tag("signature");
-	$refs = $log->get_head_tag("refs");
-	$suse_repo_path = $log->get_head_tag("suse-repo-path");
-	$git_dir = $log->get_head_tag("git-dir");
+	$signature = Options::get("signature");
+	$refs = Options::get("refs");
+	$suse_repo_path = Options::get("suse-repo-path");
+	$git_dir = Options::get("git-dir");
 
 	msg("start:\t\t".$start);
 	msg("stop:\t\t".$stop);
 	msg("signature:\t".$signature);
 	msg("refs:\t\t".$refs);
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
@@ -1719,16 +1705,15 @@ function cmd_format_suse($argv)
 
 function cmd_list_cherry_picks($argv)
 {
-	$opts = Options::$options;
-	$work_dir = realpath(get_opt("work-dir"));
+	$work_dir = Options::get("work-dir");
 
 	$log = Globals::$log;
 
-	$branch = $log->get_head_tag("branch");
+	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$git_dir = $log->get_head_tag("git-dir");
+	$git_dir = Options::get("git-dir");
 
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
@@ -1791,12 +1776,12 @@ function parse_options($argv)
 	else
 		return;
 
-	if (Options::get("debug"))
+	if (Options::get("debug", FALSE))
 		define("DEBUG", TRUE);
 	else
 		define("DEBUG", FALSE);
 
-	if (Options::get("debug-git"))
+	if (Options::get("debug-git", FALSE))
 		define("DEBUG_GIT", TRUE);
 	else
 		define("DEBUG_GIT", FALSE);
@@ -1809,7 +1794,7 @@ function parse_options($argv)
 	}
 
 	$work_dir = Options::get("work-dir");
-	Options::$log->load($work_dir."/commits.log");
+	Globals::$log->load($work_dir."/commits.log");
 
 	// Commands that require the log file
 	switch($command) {

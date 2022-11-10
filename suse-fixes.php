@@ -126,15 +126,13 @@ function parse_fixes_simple($lines, $git)
 
 function load_fixes_file($fixes_file, $work_dir, $git)
 {
-	$opts = Globals::$options;
 	$file = file_get_contents($fixes_file);
 	if ($file === FALSE)
 		fatal("Failed to open fixes file: ".$fixes_file);
 	$lines = explode(PHP_EOL, $file);
 
-	if (isset($opts['file-type'])) {
-		$filetype = get_opt("file-type");
-	} else {
+	$filetype = Options::get("file-type", FALSE);
+	if ($filetype === FALSE) {
 		$file_types = array("from-email", "from-script", "simple");
 		$filetype = Util::ask_from_array($file_types, "Select file-type:", TRUE);
 	}
@@ -142,8 +140,8 @@ function load_fixes_file($fixes_file, $work_dir, $git)
 	// Figure out which release we want to work on
 	if ($filetype == "from-email") {
 		if (isset($opts['release']))
-			$release = get_opt("release");
-		else
+		$release = Options::get("release");
+		if ($release === FALSE)
 			$release = figure_out_release($lines);
 
 		$release = str_replace(" ", "-", $release);
@@ -488,44 +486,33 @@ function get_kernel_version($suse_repo_path)
 function cmd_suse_fixes($argv)
 {
 	$opts = Globals::$options;
-	$work_dir = realpath(get_opt("work-dir"));
-	$suse_repo_path = get_opt("suse-repo-path");
+	$work_dir = Options::get("work-dir");
+	$suse_repo_path = Options::get("suse-repo-path");
 
-	if (isset($opts['refs']))
-		$refs = get_opt("refs");
+	// Special case where we want to fall back to "git-fixes" if
+	// no ref is explicitly specified on the command line
+	if (isset(Options::$options['refs']))
+		$refs = Options::get("refs");
 	else
 		$refs = "git-fixes";
 
-	if (isset($opts['fixes-file']))
-		$fixes_file = realpath(get_opt("fixes-file"));
-	else
-		$fixes_file = FALSE;
+	$fixes_file = Options::get("fixes-file", FALSE);
 
-	if (isset($opts['skip-review']))
-		$skip_review = TRUE;
-	else
-		$skip_review = FALSE;
+	$skip_review = Options::get("skip-review", FALSE);
 
 	// Skip all patches that doesn't immediately applies
-	if (isset($opts['skip-fails']))
-		$skip_fails = TRUE;
-	else
-		$skip_fails = FALSE;
+	$skip_fails = Options::get("skip-fails");
 
 	// Ignore everything that is not alt-commits
-	if (isset($opts['only-alt-commits'])) {
-		$only_alt_commits = TRUE;
+	$only_alt_commits = Options::get("only-alt-commits", FALSE);
+	if ($only_alt_commits)
 		msg("Only backporting Alt-commits");
-	} else {
-		$only_alt_commits = FALSE;
-	}
 
-	if (isset($opts['repo-tag']))
-		$repo_tag = get_opt("repo-tag");
+	$repo_tag = Options::get("repo-tag", FALSE);
 
-	$signoff = get_opt("signoff");
+	$signature = Options::get("signature");
 
-	$git_dir = realpath(get_opt("git-dir"));
+	$git_dir = Options::get("git-dir");
 	$git = new GitRepo();
 	$git->set_dir($git_dir);
 
@@ -624,7 +611,7 @@ function cmd_suse_fixes($argv)
 
 		// Add proper tags to the patch
 		debug("Inserting real tags...");
-		if (isset($repo_tag)) {
+		if ($repo_tag !== FALSE) {
 			$mainline = "Queued in subsystem maintainer repo";
 		} else {
 			$mainline = $p->get_mainline_tag($git, $version_list);
@@ -644,17 +631,17 @@ function cmd_suse_fixes($argv)
 				"Patch-mainline: ".$mainline,
 				"References: ".$refs);
 
-		if (isset($repo_tag))
+		if ($repo_tag !== FALSE)
 			$tags[] = "Git-repo: ".$repo_tag;
 
 		suse_insert_file($file_src, $file_dst);
-		insert_tags_in_patch($file_dst, $tags, $signoff);
+		insert_tags_in_patch($file_dst, $tags, $signature);
 
 		$res = suse_insert_patch($suse_repo_path, $file_dst);
 		$res += suse_sequence_patch($suse_repo_path, $out);
 
 		// If we're working on a non-mainline repo ($repo_tag is set) we cannot do any clever tricks so skip this part
-		if (isset($repo_tag)) {
+		if ($repo_tag !== FALSE) {
 			if ($res == 0)
 				msg("Patch will apply without modifications");
 			else

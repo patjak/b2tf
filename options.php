@@ -61,8 +61,9 @@ class Options {
 	 * Otherwise we return FALSE
 	 *
 	 * @param $opt	Name of the option to retrieve
+	 * @param $required The option must be found or a fatal error occurs
 	 */
-	public static function get($opt) {
+	public static function get($opt, $required = TRUE) {
 
 		// Check the command line
 		if (isset(self::$options[$opt]))
@@ -83,6 +84,9 @@ class Options {
 		// Handle defaults
 		if ($opt == "work-dir" || $opt == "git-dir")
 			return realpath("./");
+
+		if ($required)
+			fatal("Couldn't get required option: ".$opt);
 
 		return FALSE;
 	}
