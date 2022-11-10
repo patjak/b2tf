@@ -2,6 +2,7 @@
 <?php
 require_once("util.php");
 require_once("storage.php");
+require_once("options.php");
 require_once("suse-fixes.php");
 // How long back in commit history we check for cherry picks
 define("CHERRY_PICK_HISTORY", 4000);
@@ -1796,11 +1797,13 @@ function parse_options($argv)
 		"debug-git",
 		);
 
-	$options = getopt("", $opts, $optind);
+	$argv = Options::parse($argv, $opts);
+
+	$options = Options::$options;;
 	Globals::$options = $options;
 
-	if (isset($argv[$optind]))
-		$command = $argv[$optind];
+	if (isset($argv[1]))
+		$command = $argv[1];
 	else
 		return;
 
