@@ -683,7 +683,7 @@ class GitRepo {
 		return FALSE;
 	}
 
-	public function get_backported_commits($log, $opts) {
+	public function get_backported_commits($log) {
 		$start = $log->get_head_tag("branch-point");
 		$branch = $log->get_head_tag("branch");
 		$this->cmd("git rev-list --reverse ".$start."..".$branch, $res);
@@ -1084,7 +1084,7 @@ function cmd_sanity_check($argv)
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
 
-	$backported = $git->get_backported_commits($log, $opts);
+	$backported = $git->get_backported_commits($log);
 
 	$i = 0;
 	$j = 0;
@@ -1225,7 +1225,7 @@ function cmd_rebase($argv)
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
 
-	$backported = $git->get_backported_commits($log, $opts);
+	$backported = $git->get_backported_commits($log);
 
 	$i = 0;
 	$j = 0;
