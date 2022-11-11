@@ -802,7 +802,7 @@ function resolve_conflicts($git, $target_branch)
 function cmd_apply($argv)
 {
 	$work_dir = Options::get("work-dir");
-	$force = Options::get("force");
+	$force = Options::get("force", FALSE);
 
 	$log = Globals::$log;
 	$git = Globals::$git;
