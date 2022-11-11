@@ -977,8 +977,8 @@ function cmd_setup($argv)
 	$work_dir = Options::get("work-dir");
 	$branch = Options::get("branch");
 	$branch_point = Options::get("branch-point");
-	$range_start = Options::get("start");
-	$range_stop = Options::get("stop");
+	$range_start = Options::get("range-start");
+	$range_stop = Options::get("range-stop");
 	$git_dir = Options::get("git-dir");
 	$paths = Options::get("paths");
 
@@ -1781,8 +1781,8 @@ function parse_options($argv)
 }
 
 $opts = array(
-	"start:",
-	"stop:",
+	"range-start:",
+	"range-stop:",
 	"branch:",
 	"branch-point:",
 	"work-dir:",
