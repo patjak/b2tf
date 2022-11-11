@@ -8,7 +8,7 @@ require_once("suse-fixes.php");
 define("CHERRY_PICK_HISTORY", 4000);
 
 function msg($msg) { echo $msg."\n"; }
-function fatal($msg) { echo "\e[31m".$msg."\e[0m\n"; exit(1); }
+function fatal($msg) { echo "\e[31m".$msg."\e[0m\n"; if (Globals::$debug) { debug_print_backtrace(); } exit(1); }
 function error($msg) { echo "\e[31m".$msg."\e[0m\n"; }
 function info($msg) { echo "\e[34m".$msg."\e[0m\n"; }
 function green($msg) { echo "\e[32m".$msg."\e[0m\n"; }
