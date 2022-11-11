@@ -1804,7 +1804,7 @@ $opts = array(
 	"debug-git",
 	);
 
-$argv = Options::parse($argv, $opts);
+$args = Options::parse($argv, $opts);
 
 Util::get_user($username, $fullname, $path);
 Storage::$path = $path."/.b2tf.xml";
@@ -1819,7 +1819,7 @@ if (Options::get("debug-git", FALSE))
 Globals::$log = new Log();
 Globals::$git = new GitRepo();
 
-parse_options($argv);
+parse_options($args);
 
 ?>
 

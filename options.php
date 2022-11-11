@@ -6,34 +6,35 @@ class Options {
 	// Since the argument parsing in PHP is garbage we must write our own
 	// We save everything that doesn't get parsed and return it (commands, etc)
 
-	public static function parse($argv, $opts) {
-		$num = count($argv);
+	public static function parse($args, $opts) {
+		$num = count($args);
 		for ($i = 1; $i < $num; $i++) {
-			$arg = $argv[$i];
+			$arg = $args[$i];
 
-			if (strpos($arg, "--") != 0)
+			if (strpos($arg, "--") !== 0)
 				continue;
 
 			foreach ($opts as $opt) {
 				if ($opt[-1] == ":") {
 					// Parse options that have a parameter
 
-					$opt = substr($opt,0, -1);
+					$opt = substr($opt, 0, -1);
 					$val = Util::parse_after("--".$opt, $arg);
+
 					if ($val === FALSE)
 						continue;
 
 					if ($val == "")  {
-						self::$options[$opt] = $argv[$i + 1];
-						unset($argv[$i]);
-						unset($argv[$i + 1]);
+						self::$options[$opt] = $args[$i + 1];
+						unset($args[$i]);
+						unset($args[$i + 1]);
 						$i++;
 						break;
 					}
 					if ($val[0] == "=") {
 						$val = substr($val, 1);
 						self::$options[$opt] = $val;
-						unset($argv[$i]);
+						unset($args[$i]);
 						break;
 					}
 				} else {
@@ -43,13 +44,13 @@ class Options {
 						continue;
 
 					self::$options[$opt] = TRUE;
-					unset($argv[$i]);
+					unset($args[$i]);
 				}
 			}
 		}
 
 		// Re-index and return what is left
-		return array_values($argv);
+		return array_values($args);
 	}
 
 	/**
