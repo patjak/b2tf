@@ -583,7 +583,6 @@ class GitRepo {
 
 	// Switch to a different git branch
 	public function change_branch() {
-		$range_start = Options::get("range-start");
 		$branch = Options::get("branch");
 		$branch_point = Options::get("branch-point");
 
@@ -591,6 +590,11 @@ class GitRepo {
 			fatal("Invalid branch. Did you run setup properly?");
 
 		if ($this->get_current_branch() != $branch) {
+			$unmerged = $this->get_unmerged_paths();
+			$unstaged = $this->get_unstaged_paths();
+			if (count($unmerged) != 0 || count($unstaged) != 0)
+				fatal("Couldn't change branch due to unmerged / unstaged changes");
+
 			$this->cmd("git checkout ".$branch." 2> /dev/null", $output, $status);
 			if ($status != 0)
 				$this->cmd("git checkout -b ".$branch." ".$branch_point);
