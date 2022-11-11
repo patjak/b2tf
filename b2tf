@@ -560,7 +560,7 @@ class GitRepo {
 			if ($o == "")
 				break;
 			$o = explode(":", $o);
-			$paths[] = trim($o[1]);
+			$paths[trim($o[1])] = trim($o[0]);
 		}
 
 		return $paths;
@@ -582,18 +582,25 @@ class GitRepo {
 	}
 
 	public function add_all_unmerged() {
+		$force = Options::get("force", FALSE);
+
 		$fatal = $this->check_for_conflicts();
 		if ($fatal && $force == FALSE)
 			fatal("Unmerged paths still contain conflicts!");
 
 		$unmerged = $this->get_unmerged_paths();
-		foreach ($unmerged as $u) {
-			$this->cmd("git add ".$u);
+		foreach ($unmerged as $u => $type) {
+			if ($type == "both modified")
+				$this->cmd("git add ".$u);
+			else if ($type == "deleted by us")
+				$this->cmd("git rm ".$u);
+			else
+				error("Unknown unmerged type: ".$u);
 		}
 
 		$modified = $this->get_modified_paths();
 		msg("Added files:");
-		foreach ($modified as $m) {
+		foreach ($modified as $m => $type) {
 			green("\t".$m);
 		}
 	}
@@ -650,7 +657,7 @@ class GitRepo {
 		$unmerged = $this->get_unmerged_paths();
 		$conflicts = FALSE;
 
-		foreach ($unmerged as $u) {
+		foreach ($unmerged as $u => $type) {
 			$this->cmd("grep -Hn \"<<<<<<\" ".$u, $res);
 			if (count($res) > 0)
 				$conflicts = TRUE;
@@ -690,6 +697,22 @@ class GitRepo {
 			return TRUE;
 		else
 			return FALSE;
+	}
+
+	public function check_any_session() {
+		$in_session = FALSE;
+		if ($this->check_am_session()) {
+			debug("In AM session");
+			$in_session = TRUE;
+		} else if ($this->check_rebase_session()) {
+			debug("In rebase session");
+			$in_session = TRUE;
+		} else if ($this->check_cherrypick_session()) {
+			debug("In cherrypick session");
+			$in_session = TRUE;
+		}
+
+		return $in_session;
 	}
 
 	function check_for_cherry_pick($p)
@@ -767,7 +790,7 @@ function launch_editor($unmerged, $commit_id)
 
 	$target_branch = Options::get("range-stop");
 
-	foreach ($unmerged as $i => $u) {
+	foreach ($unmerged as $u => $type) {
 		// Figure out the extension so that the editor can do syntax highlighting
 		$info = pathinfo($u);
 		$file_ext = isset($info['extension']) ? $info['extension'] : "";
@@ -840,18 +863,7 @@ function resolve_conflicts($commit_id)
 {
 	$git = Globals::$git;
 
-	$in_session = FALSE;
-	if ($git->check_am_session()) {
-		debug("In AM session");
-		$in_session = TRUE;
-	} else if ($git->check_rebase_session()) {
-		debug("In rebase session");
-		$in_session = TRUE;
-	} else if ($git->check_cherrypick_session()) {
-		debug("In cherrypick session");
-		$in_session = TRUE;
-	}
-
+	$in_session = $git->check_any_session();
 	if (!$in_session) {
 		error("Not in a conflict session. Cannot resolve conflicts.");
 		return;
@@ -968,7 +980,8 @@ function cmd_apply($argv)
 			delimiter();
 			echo "Unmerged paths:\n";
 			$unmerged = $git->get_unmerged_paths();
-			error(array_to_str($unmerged));
+			foreach ($unmerged as $u => $type)
+				error($u);
 
 			delimiter();
 			error("Failed patch: ".basename($p->filename));
@@ -1047,8 +1060,6 @@ function cmd_setup($argv)
 function cmd_add($argv)
 {
 	$work_dir = Options::get("work-dir");
-	$force = Options::get("force", FALSE);
-
 	$git = Globals::$git;
 
 	$branch = Options::get("branch");
