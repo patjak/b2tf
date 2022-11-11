@@ -803,8 +803,29 @@ function cmd_export($argv)
 	exit();
 }
 
-function resolve_conflicts($git, $target_branch)
+function resolve_conflicts($commit_id)
 {
+	$git = Globals::$git;
+
+	if (!$git->check_am_session()) {
+		msg("Not in AM session. Nothing to resolve.");
+		return;
+	}
+
+	$unmerged = $git->get_unmerged_paths();
+
+	launch_editor($unmerged, $commit_id);
+}
+
+function cmd_resolve($argv)
+{
+	if (!isset($argv[2]))
+		fatal("Commit id not specified");
+
+	$commit_id = $argv[2];
+	debug("Resolving conflict from ".$commit_id);
+
+	resolve_conflicts($commit_id);
 }
 
 function cmd_apply($argv)
@@ -1704,6 +1725,9 @@ function parse_options($argv)
 	case "suse-fixes":
 		cmd_suse_fixes($argv);
 		exit(0);
+	case "resolve":
+		cmd_resolve($argv);
+		exit(0);
 	}
 
 	Globals::$log->load($work_dir."/commits.log");
@@ -1825,6 +1849,8 @@ Commands:
   diff - Show diff between current tree vs target tree
 
   status - Show current status of backport and git repo
+
+  resolve <commit-id> - Resolve conflicts from the specified commit
 
   suse-fixes - Automate backport of git-fixes to the SUSE repo
     --only-alt-commits	- Skip everything except Alt-commits
