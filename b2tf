@@ -791,6 +791,9 @@ function launch_editor($unmerged, $commit_id)
 	$target_branch = Options::get("range-stop");
 
 	foreach ($unmerged as $u => $type) {
+		if ($type == "deleted by us")
+			continue;
+
 		// Figure out the extension so that the editor can do syntax highlighting
 		$info = pathinfo($u);
 		$file_ext = isset($info['extension']) ? $info['extension'] : "";
