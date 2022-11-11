@@ -103,9 +103,9 @@ class Patch {
 	 * Read out patch header (body not included) from git commit
 	 *
 	 * @param $commit_id	Hash of commit to process
-	 * @param $git		The GitRepo object to use for finding the commit
 	 */
-	public function parse_from_git($commit_id, $git) {
+	public function parse_from_git($commit_id) {
+		$git = Globals::$git;
 		$filename = "/tmp/tmp-patch.tmp";
 
 		$git->cmd("git log -n1 ".$commit_id." 2> /dev/null", $output, $status);
@@ -181,8 +181,9 @@ class Patch {
 	 * @param $git The GitRepo object to use for processing
 	 * @return Release name
 	 */
-	public static function get_next_tagged_release($git)
+	public static function get_next_tagged_release()
 	{
+		$git = Globals::$git;
 		$git->cmd("git tag --sort=taggerdate | tail -1", $res);
 
 		if (count($res) != 1)
@@ -208,11 +209,11 @@ class Patch {
 	/**
 	 * Parse the mainline tag version of the Patch object
 	 *
-	 * @param $git The GitRepo object to use for processing
 	 * @return The tag version of the Patch (ie. v5.4-rc3)
 	 */
-	function get_mainline_tag($git, &$version_list = array())
+	function get_mainline_tag(&$version_list = array())
 	{
+		$git = Globals::$git;
 		$git->cmd("git tag --sort=version:refname --contains ".$this->commit_id, $res);
 
 		// Provide a list of all tags containing the commit
@@ -235,7 +236,7 @@ class Patch {
 			return $res[0];
 		} else {
 			error("Failed to find mainline tag for: ".$this->commit_id);
-			$next_tag = self::get_next_tagged_release($git);
+			$next_tag = self::get_next_tagged_release();
 			$ask = Util::ask("Use ".$next_tag."? (Y)es, (n)o, (s)kip: ", array("y", "n", "s"), "y");
 
 			if ($ask == "y")
@@ -493,14 +494,14 @@ class Log {
 	 *
 	 * @param $git Git repo to check against
 	 */
-	function sanity_check_last($git) {
+	function sanity_check_last() {
 		// Sanity check log vs git-repo
 		$last = $this->get_last_commit();
 		if (isset($last[1]) && strlen($last[1]) == 40) {
 			$p1 = new Patch(); // Upstream commit
 			$p2 = new Patch(); // Backport commit
-			$p1->parse_from_git($last[0], $git);
-			$p2->parse_from_git($last[1], $git);
+			$p1->parse_from_git($last[0]);
+			$p2->parse_from_git($last[1]);
 			if ($p1->subject != $p2->subject) {
 				fatal("Commit log is corrupted. Must be fixed manually.\n(".
 				      $p1->subject." != ".$p2->subject.")");
@@ -581,7 +582,7 @@ class GitRepo {
 	}
 
 	// Switch to a different git branch
-	public function change_branch($log) {
+	public function change_branch() {
 		$range_start = Options::get("range-start");
 		$branch = Options::get("branch");
 		$branch_point = Options::get("branch-point");
@@ -616,7 +617,9 @@ class GitRepo {
 		return $i;
 	}
 
-	public function skip_commit($log, $p, $reason) {
+	public function skip_commit($p, $reason) {
+		$log = Globals::$log;
+
 		$this->cmd("git am --skip");
 		$log->update_commit($p->commit_id, $reason);
 	}
@@ -652,8 +655,10 @@ class GitRepo {
 			return FALSE;
 	}
 
-	function check_for_cherry_pick($log, $p)
+	function check_for_cherry_pick($p)
 	{
+		$log = Globals::$log;
+
 		// Check if patch is already cherry picked
 		$range_start = Options::get("range-start");
 		$this->cmd("git log ".$range_start."~".CHERRY_PICK_HISTORY.
@@ -686,7 +691,7 @@ class GitRepo {
 		return FALSE;
 	}
 
-	public function get_backported_commits($log) {
+	public function get_backported_commits() {
 		$start = Options::get("branch-point");
 		$branch = Options::get("branch");
 		$this->cmd("git rev-list --reverse ".$start."..".$branch, $res);
@@ -713,8 +718,11 @@ function get_patch_filenames($dir)
 	return $files;
 }
 
-function launch_editor($unmerged, $p, $log, $git)
+function launch_editor($unmerged, $p)
 {
+	$log = Globals::$log;
+	$git = Globals::$git;
+
 	$solutions = "";
 	foreach ($unmerged as $i => $u) {
 		// Figure out the extension so that the editor can do syntax highlighting
@@ -798,7 +806,7 @@ function cmd_apply($argv)
 	$branch = Options::get("branch");
 	$range_start = Options::get("range-start");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$patches = Patch::get_patches($work_dir."/patches");
 
@@ -806,7 +814,7 @@ function cmd_apply($argv)
 	if ($num_patches == 0)
 		fatal("No patches to apply. Did you forget to run export?");
 
-	$log->sanity_check_last($git);
+	$log->sanity_check_last();
 
 	$next_commit = $log->get_next_commit();
 	$i = $git->find_commit_index($next_commit, $patches);
@@ -820,7 +828,7 @@ function cmd_apply($argv)
 
 			if (count($unmerged) > 0 || count($unstaged) > 0) {
 				error("Repository contains unmerged/unstaged paths. Solve conflict before continuing.");
-				launch_editor($unmerged, $p, $log, $git);
+				launch_editor($unmerged, $p);
 
 				// If all conflicts are fixed we automatically add them
 				// User can also force the changes even with conflicts by adding the --force option
@@ -868,7 +876,7 @@ function cmd_apply($argv)
 			// Save git am output to file so we can show it in edit (vim, emacs, etc.)
 			file_put_contents($work_dir."/output.tmp", array_to_str($output_am));
 
-			$cherry_id = $git->check_for_cherry_pick($log, $p);
+			$cherry_id = $git->check_for_cherry_pick($p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
@@ -888,7 +896,7 @@ function cmd_apply($argv)
 			echo "Fix conflict and rerun apply.\n";
 			info("(IMPORTANT! Do NOT run: git am --continue)");
 
-			launch_editor($unmerged, $p, $log, $git);
+			launch_editor($unmerged, $p);
 
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE) {
@@ -903,7 +911,7 @@ function cmd_apply($argv)
 
 		// Patch might not have introduced changes thus did not get applied (not needed)
 		if ($old_id == $new_id) {
-			$cherry_id = $git->check_for_cherry_pick($log, $p);
+			$cherry_id = $git->check_for_cherry_pick($p);
 			if ($cherry_id !== FALSE) {
 				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
 				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
@@ -960,14 +968,13 @@ function cmd_add($argv)
 	$work_dir = Options::get("work-dir");
 	$force = Options::get("force", FALSE);
 
-	$log = Globals::$log;
 	$git = Globals::$git;
 
 	$branch = Options::get("branch");
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$fatal = $git->check_for_conflicts();
 	if ($fatal && $force == FALSE)
@@ -994,7 +1001,7 @@ function cmd_restart($argv)
 	$log = Globals::$log;
 	$git = Globals::$git;
 
-	$git->change_branch($log);
+	$git->change_branch();
 	$branch = Options::get("branch");
 
 	if ($git->check_am_session()) {
@@ -1033,12 +1040,12 @@ function cmd_sanity_check($argv)
 	$range_start = Options::get("range-start");
 	$range_stop = Options::get("range-stop");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
 
-	$backported = $git->get_backported_commits($log);
+	$backported = $git->get_backported_commits();
 
 	$i = 0;
 	$j = 0;
@@ -1059,7 +1066,7 @@ function cmd_sanity_check($argv)
 			continue;
 
 		$p1 = new Patch(); // Upstream commit
-		$p1->parse_from_git($line[0], $git);
+		$p1->parse_from_git($line[0]);
 
 		if ($line[1] == "empty") {
 			debug("Processing empty: ". $p1->commit_id." ".$p1->subject);
@@ -1089,12 +1096,12 @@ function cmd_sanity_check($argv)
 		}
 
 		$p2 = new Patch(); // Backport commit
-		$p2->parse_from_git($line[1], $git);
+		$p2->parse_from_git($line[1]);
 		// info("\"".$p1->subject."\" == \"".$p2->subject."\"");
 
 		$bp_id = $backported[$j];
 		$p3 = new Patch();
-		$p3->parse_from_git($bp_id, $git);
+		$p3->parse_from_git($bp_id);
 
 		// HACK: Sometimes there are double spaces in some subjects.
 		// They must be removed before comparing
@@ -1168,12 +1175,12 @@ function cmd_rebase($argv)
 	$range_stop = Options::get("range-stop");
 	$fix = Options::get("fix", FALSE);
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
 
-	$backported = $git->get_backported_commits($log);
+	$backported = $git->get_backported_commits();
 
 	$i = 0;
 	$j = 0;
@@ -1197,7 +1204,7 @@ function cmd_rebase($argv)
 		echo "\rProgress: ".round(($i / count($body) * 100), 0)."%\tRebased: ".$num_fixed;
 
 		$p1 = new Patch(); // Upstream commit
-		$p1->parse_from_git($line[0], $git);
+		$p1->parse_from_git($line[0]);
 
 		if ($line[1] == "empty")
 			continue;
@@ -1210,11 +1217,11 @@ function cmd_rebase($argv)
 		$upstream_commits[] = $p1->commit_id;
 
 		$p2 = new Patch(); // Backport commit
-		$p2->parse_from_git($line[1], $git);
+		$p2->parse_from_git($line[1]);
 
 		$bp_id = $backported[$j];
 		$p3 = new Patch();
-		$p3->parse_from_git($bp_id, $git);
+		$p3->parse_from_git($bp_id);
 
 		// HACK: Sometimes there are double spaces in some subjects.
 		// They must be removed before comparing
@@ -1264,7 +1271,6 @@ function cmd_diffstat($argv)
 {
 	$work_dir = Options::get("work-dir");
 
-	$log = Globals::$log;
 	$git = Globals::$git;
 
 	$branch = Options::get("branch");
@@ -1274,7 +1280,7 @@ function cmd_diffstat($argv)
 	$range_stop = Options::get("range-stop");
 	$paths = Options::get("paths");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$res = FALSE;
 	$git->cmd("git diff --stat ".$branch." ".$range_stop." -- ".$paths, $res, $status);
@@ -1295,7 +1301,7 @@ function cmd_status($argv)
 	$paths = Options::get("paths");
 	$branch = Options::get("branch");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$last_commit = $log->get_last_commit();
 	$num_commits = $log->get_num_commits();
@@ -1372,7 +1378,6 @@ function cmd_diff($argv)
 {
 	$work_dir = Options::get("work-dir");
 
-	$log = Globals::$log;
 	$git = Globals::$git;
 
 	$branch = Options::get("branch");
@@ -1382,7 +1387,7 @@ function cmd_diff($argv)
 	$range_stop = Options::get("range-stop");
 	$paths = Options::get("paths");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$git->cmd("git diff ".$branch." ".$range_stop." -- ".$paths, $res, $status);
 	if ($status != 0)
@@ -1410,7 +1415,7 @@ function cmd_log($argv)
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
@@ -1423,7 +1428,7 @@ function cmd_log($argv)
 
 		if (strlen($line[0]) == 40 && strlen($line[1]) == 40) {
 			$p = new Patch();
-			$p->parse_from_git($line[0], $git);
+			$p->parse_from_git($line[0]);
 
 			msg($line[0]." ".$line[1]." ".$p->subject);
 		}
@@ -1484,9 +1489,11 @@ function insert_tags_in_patch($filename, $tags, $signature = "")
 
 }
 
-function suse_format_patch($p1, $p2, $signature, $refs, $git)
+function suse_format_patch($p1, $p2, $signature, $refs)
 {
-	$mainline = $p2->get_mainline_tag($git);
+	$git = Globals::$git;
+
+	$mainline = $p2->get_mainline_tag();
 	if ($mainline === FALSE)
 		fatal("Couldn't find mainline tag for ".$p2->commit_id." ".$p2->subject);
 
@@ -1577,7 +1584,7 @@ function cmd_format_suse($argv)
 
 	$suse_backports = get_suse_backports($suse_repo_path);
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	exec("mkdir -p ".$work_dir."/patches.suse");
 	exec("rm ".$work_dir."/patches.suse/*");
@@ -1601,10 +1608,10 @@ function cmd_format_suse($argv)
 			$p_file = $patches[$j];
 
 			$p1 = new Patch();
-			$p1->parse_from_git($p_file->commit_id, $git);
+			$p1->parse_from_git($p_file->commit_id);
 
 			$p2 = new Patch();
-			$p2->parse_from_git($line[0], $git);
+			$p2->parse_from_git($line[0]);
 
 			if (in_array($p2->commit_id, $suse_backports)) {
 				// Patch is already backported so skip it
@@ -1617,7 +1624,7 @@ function cmd_format_suse($argv)
 			if ($p1->subject != $p2->subject)
 				error("Subject not matching\n".$p1->subject." != ".$p2->subject);
 
-			suse_format_patch($p_file, $p2, $signature, $refs, $git);
+			suse_format_patch($p_file, $p2, $signature, $refs);
 			msg("(".($j + 1)."/".count($patches).") ".$p2->commit_id." ".$p2->subject);
 
 			$suse_filenames .= "patches.suse/".basename($p_file->filename)." ";
@@ -1642,7 +1649,7 @@ function cmd_list_cherry_picks($argv)
 	if ($branch == "")
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
-	$git->change_branch($log);
+	$git->change_branch();
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
@@ -1654,9 +1661,9 @@ function cmd_list_cherry_picks($argv)
 			continue;
 
 		$p1 = new Patch();
-		$p1->parse_from_git($line[0], $git);
+		$p1->parse_from_git($line[0]);
 		$p2 = new Patch();
-		$p2->parse_from_git($line[2], $git);
+		$p2->parse_from_git($line[2]);
 
 		if ($p1->subject != $p2->subject)
 			error("Subjects doesn't match");

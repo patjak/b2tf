@@ -190,7 +190,7 @@ function check_for_matches($p, $cache, $git)
 	foreach ($matches as $commit_id) {
 		$commit_id = explode(" ", $commit_id)[0];
 		$dup = new Patch();
-		$dup->parse_from_git($commit_id, $git);
+		$dup->parse_from_git($commit_id);
 
 		if ($p->commit_id == $dup->commit_id)
 			continue;
@@ -579,7 +579,7 @@ function cmd_suse_fixes($argv)
 	foreach ($patches as $hash) {
 		$i++;
 		$p = new Patch();
-		$p->parse_from_git($hash, $git);
+		$p->parse_from_git($hash);
 
 		msg("\nBackporting (".$i."/".count($patches)."):");
 		green($hash." ".$p->subject);
@@ -614,7 +614,7 @@ function cmd_suse_fixes($argv)
 		if ($repo_tag !== FALSE) {
 			$mainline = "Queued in subsystem maintainer repo";
 		} else {
-			$mainline = $p->get_mainline_tag($git, $version_list);
+			$mainline = $p->get_mainline_tag($version_list);
 			if ($mainline === FALSE) {
 				error("SKIP: Failed to get mainline tag for commit: ".$hash);
 				continue;
