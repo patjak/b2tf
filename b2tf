@@ -722,12 +722,18 @@ function get_patch_filenames($dir)
 	return $files;
 }
 
-function launch_editor($unmerged, $p)
+function launch_editor($unmerged, $commit_id)
 {
 	$log = Globals::$log;
 	$git = Globals::$git;
 
-	$solutions = "";
+	$patch_filename = "/tmp/".$commit_id.".patch";
+	$git->cmd("git show ".$commit_id." > ".$patch_filename, $output, $status);
+	if ($status != 0)
+		fatal("Failed to launch editor for commit ".$commit_id);
+
+	$target_branch = Options::get("range-stop");
+
 	foreach ($unmerged as $i => $u) {
 		// Figure out the extension so that the editor can do syntax highlighting
 		$info = pathinfo($u);
@@ -737,7 +743,7 @@ function launch_editor($unmerged, $p)
 		$solution_name = "solution-tmp".$file_ext;
 
 		// Store the target version of the file (eg git show v5.5:<filename>)
-		$git->cmd("git show ".Options::get("Range-stop").":".$u." | ".
+		$git->cmd("git show ".$target_branch.":".$u." | ".
 			"dd of=/tmp/".$solution_name." 2> /dev/null", $output, $status);
 
 		// Add the entire path to modified files
@@ -754,10 +760,12 @@ function launch_editor($unmerged, $p)
 		}
 
 		// Open vim with all the relevant files
-		passthru("vim -O ".$line_no." ".$u." /tmp/".$solution_name." ".$p->filename." 2> /dev/null");
+		passthru("vim -O ".$line_no." ".$u." /tmp/".$solution_name." ".$patch_filename." 2> /dev/null");
 
 		exec("rm /tmp/".$solution_name);
 	}
+
+	exec("rm ".$patch_filename);
 }
 
 function cmd_export($argv)
@@ -832,7 +840,7 @@ function cmd_apply($argv)
 
 			if (count($unmerged) > 0 || count($unstaged) > 0) {
 				error("Repository contains unmerged/unstaged paths. Solve conflict before continuing.");
-				launch_editor($unmerged, $p);
+				launch_editor($unmerged, $p->commit_id);
 
 				// If all conflicts are fixed we automatically add them
 				// User can also force the changes even with conflicts by adding the --force option
@@ -900,7 +908,7 @@ function cmd_apply($argv)
 			echo "Fix conflict and rerun apply.\n";
 			info("(IMPORTANT! Do NOT run: git am --continue)");
 
-			launch_editor($unmerged, $p);
+			launch_editor($unmerged, $p->commit_id);
 
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE) {
