@@ -1402,7 +1402,6 @@ function cmd_status($argv)
 
 	if ($last_num >= $num_commits) {
 		msg("Backport is done!");
-		return;
 	}
 
 	$last_line = count($res) - 1;
@@ -1412,10 +1411,10 @@ function cmd_status($argv)
 	$patches = Patch::get_patches($work_dir."/patches");
 	$p = Patch::get_by_commit($next_commit, $patches);
 
-	if ($git->check_am_session())
-		echo "In AM session on commit:\n";
+	if ($git->check_any_session())
+		echo "In conflict session\n";
 	else
-		echo "Not in AM session.\n";
+		echo "Not in conflict session.\n";
 
 	if ($p === FALSE) {
 		echo "No more patches to backport\n";
