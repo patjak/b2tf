@@ -66,24 +66,36 @@ class Options {
 	public static function get($opt, $required = TRUE) {
 
 		// Check the command line
-		if (isset(self::$options[$opt]))
-			return self::$options[$opt];
-
-		// Try the commit log
-		$val = Globals::$log->get_head_tag($opt);
-		if ($val !== FALSE)
+		if (isset(self::$options[$opt])) {
+			$val = self::$options[$opt];
+			debug("Option from command line: ".$opt." = ".$val);
 			return $val;
+		}
+
+		// Try the commit log if it's loaded
+		if (Globals::$log !== FALSE) {
+			$val = Globals::$log->get_head_tag($opt);
+			if ($val !== FALSE) {
+				debug("Option from commit log: ".$opt." = ".$val);
+				return $val;
+			}
+		}
 
 		// As a last resort, look in the users config file
 		$params = Storage::get_parameters();
 		foreach ($params as $param) {
-			if ($param->name == $opt)
-				return $param->value;
+			if ($param->name == $opt) {
+				$val = $param->value;
+				debug("Option from ~/.b2tf.xml: ".$opt." = ".$val);
+				return $val;
+			}
 		}
 
 		// Handle defaults
-		if ($opt == "work-dir" || $opt == "git-dir")
+		if ($opt == "work-dir" || $opt == "git-dir") {
+			debug("Option from default value: ".$opt." = ".$val);
 			return realpath("./");
+		}
 
 		if ($required)
 			fatal("Couldn't get required option: ".$opt);

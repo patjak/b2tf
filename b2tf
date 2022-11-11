@@ -12,12 +12,15 @@ function fatal($msg) { echo "\e[31m".$msg."\e[0m\n"; exit(1); }
 function error($msg) { echo "\e[31m".$msg."\e[0m\n"; }
 function info($msg) { echo "\e[34m".$msg."\e[0m\n"; }
 function green($msg) { echo "\e[32m".$msg."\e[0m\n"; }
-function debug($msg) { if (DEBUG) { echo "\e[33m".$msg."\e[0m\n"; } }
-function debug_git($msg) { if (DEBUG_GIT) { echo "\e[33m".$msg."\e[0m\n"; } }
+function debug($msg) { if (Globals::$debug) { echo "\e[33m".$msg."\e[0m\n"; } }
+function debug_git($msg) { if (Globals::$debug_git) { echo "\e[33m".$msg."\e[0m\n"; } }
 function delimiter() { echo "\e[33m----------\e[0m\n"; }
 
 class Globals {
-	public static $log = FALSE;
+	public static	$log = FALSE,
+			$git,
+			$debug = FALSE,
+			$debug_git = FALSE;
 };
 
 /**
@@ -1722,32 +1725,6 @@ function cmd_list_cherry_picks($argv)
 
 function parse_options($argv)
 {
-	$opts = array(
-		"start:",
-		"stop:",
-		"branch:",
-		"branch-point:",
-		"work-dir:",
-		"git-dir:",
-		"paths:",
-		"signature:",
-		"skip-review",
-		"skip-fails",
-		"refs:",
-		"release:",
-		"repo-tag:",
-		"fix",
-		"force",
-		"fixes-file:",
-		"file-type:",
-		"suse-repo-path:",
-		"only-alt-commits",
-		"debug",
-		"debug-git",
-		);
-
-	$argv = Options::parse($argv, $opts);
-
 	$options = Options::$options;;
 
 	if (isset($argv[1]))
@@ -1755,15 +1732,11 @@ function parse_options($argv)
 	else
 		return;
 
-	if (Options::get("debug", FALSE))
-		define("DEBUG", TRUE);
-	else
-		define("DEBUG", FALSE);
+	$work_dir = Options::get("work-dir");
 
-	if (Options::get("debug-git", FALSE))
-		define("DEBUG_GIT", TRUE);
-	else
-		define("DEBUG_GIT", FALSE);
+	// Getting the git-dir option here will not look in the log since it's not loaded
+	$git_dir = Options::get("git-dir");
+	Globals::$git->set_dir($git_dir);
 
 	// Commands that don't require the log file
 	switch ($command) {
@@ -1772,8 +1745,11 @@ function parse_options($argv)
 		exit(0);
 	}
 
-	$work_dir = Options::get("work-dir");
 	Globals::$log->load($work_dir."/commits.log");
+
+	// Getting the git-dir option here will include the log
+	$git_dir = Options::get("git-dir");
+	Globals::$git->set_dir($git_dir);
 
 	// Commands that require the log file
 	switch($command) {
@@ -1822,10 +1798,45 @@ function parse_options($argv)
 	}
 }
 
-Globals::$log = new Log();
+$opts = array(
+	"start:",
+	"stop:",
+	"branch:",
+	"branch-point:",
+	"work-dir:",
+	"git-dir:",
+	"paths:",
+	"signature:",
+	"skip-review",
+	"skip-fails",
+	"refs:",
+	"release:",
+	"repo-tag:",
+	"fix",
+	"force",
+	"fixes-file:",
+	"file-type:",
+	"suse-repo-path:",
+	"only-alt-commits",
+	"debug",
+	"debug-git",
+	);
+
+$argv = Options::parse($argv, $opts);
+
 Util::get_user($username, $fullname, $path);
 Storage::$path = $path."/.b2tf.xml";
 Storage::load();
+
+if (Options::get("debug", FALSE))
+	Globals::$debug = TRUE;
+
+if (Options::get("debug-git", FALSE))
+	Globals::$debug_git = TRUE;
+
+Globals::$log = new Log();
+Globals::$git = new GitRepo();
+
 parse_options($argv);
 
 ?>
