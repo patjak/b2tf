@@ -581,6 +581,23 @@ class GitRepo {
 		return $this->parse_status_paths("Changes not staged for commit:", 2);
 	}
 
+	public function add_all_unmerged() {
+		$fatal = $this->check_for_conflicts();
+		if ($fatal && $force == FALSE)
+			fatal("Unmerged paths still contain conflicts!");
+
+		$unmerged = $this->get_unmerged_paths();
+		foreach ($unmerged as $u) {
+			$this->cmd("git add ".$u);
+		}
+
+		$modified = $this->get_modified_paths();
+		msg("Added files:");
+		foreach ($modified as $m) {
+			green("\t".$m);
+		}
+	}
+
 	// Switch to a different git branch
 	public function change_branch() {
 		$branch = Options::get("branch");
@@ -654,6 +671,22 @@ class GitRepo {
 	public function check_am_session() {
 		$this->cmd("git status", $res);
 		if ($res[1] == "You are in the middle of an am session.")
+			return TRUE;
+		else
+			return FALSE;
+	}
+
+	public function check_rebase_session() {
+		$this->cmd("git status", $res);
+		if (strpos($res[0], "interactive rebase in progress") === 0)
+			return TRUE;
+		else
+			return FALSE;
+	}
+
+	public function check_cherrypick_session() {
+		$this->cmd("git status", $res);
+		if (strpos($res[1], "You are currently cherry-picking commit") === 0)
 			return TRUE;
 		else
 			return FALSE;
@@ -807,14 +840,29 @@ function resolve_conflicts($commit_id)
 {
 	$git = Globals::$git;
 
-	if (!$git->check_am_session()) {
-		msg("Not in AM session. Nothing to resolve.");
+	$in_session = FALSE;
+	if ($git->check_am_session()) {
+		debug("In AM session");
+		$in_session = TRUE;
+	} else if ($git->check_rebase_session()) {
+		debug("In rebase session");
+		$in_session = TRUE;
+	} else if ($git->check_cherrypick_session()) {
+		debug("In cherrypick session");
+		$in_session = TRUE;
+	}
+
+	if (!$in_session) {
+		error("Not in a conflict session. Cannot resolve conflicts.");
 		return;
 	}
 
 	$unmerged = $git->get_unmerged_paths();
 
 	launch_editor($unmerged, $commit_id);
+
+	msg("Resolve done");
+	$git->add_all_unmerged();
 }
 
 function cmd_resolve($argv)
@@ -1009,20 +1057,7 @@ function cmd_add($argv)
 
 	$git->change_branch();
 
-	$fatal = $git->check_for_conflicts();
-	if ($fatal && $force == FALSE)
-		fatal("Unmerged paths still contain conflicts!");
-
-	$unmerged = $git->get_unmerged_paths();
-	foreach ($unmerged as $u) {
-		$git->cmd("git add ".$u);
-	}
-
-	$modified = $git->get_modified_paths();
-	echo "Added files:\n";
-	foreach ($modified as $m) {
-		green("\t".$m);
-	}
+	$git->add_all_unmerged();
 
 	exit(0);
 }
