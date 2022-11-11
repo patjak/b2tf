@@ -1435,11 +1435,15 @@ function cmd_log($argv)
 
 	for ($i = 0; $i < count($body); $i++) {
 		$line = explode(" ", $body[$i]);
+
+		if (!isset($line[1]))
+			continue;
+
 		if (strlen($line[0]) == 40 && strlen($line[1]) == 40) {
 			$p = new Patch();
 			$p->parse_from_git($line[0], $git);
 
-			echo $line[0]." ".$p->subject."\n";
+			msg($line[0]." ".$line[1]." ".$p->subject);
 		}
 	}
 }
