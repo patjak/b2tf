@@ -363,7 +363,7 @@ function suse_sequence_patch($suse_repo_path, &$out)
 {
 	debug("Sequencing patch...");
 	unset($output);
-	exec("cd ".$suse_repo_path." && ./scripts/sequence-patch.sh --rapid 2>&1", $output, $res);
+	exec("cd ".$suse_repo_path." && ./scripts/sequence-patch.sh --dir=/dev/shm/tmp --rapid 2>&1", $output, $res);
 
 	$out = $output;
 
