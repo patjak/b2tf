@@ -1470,6 +1470,15 @@ function cmd_diff($argv)
 
 	$git->change_branch();
 
+	// If a list of files/paths are provided we use that instead of the normal paths
+	if (isset($argv[2])) {
+		$args = $argv;
+		array_shift($args);
+		array_shift($args);
+
+		$paths = implode(" ", $args);
+	}
+
 	$git->cmd("git diff ".$branch." ".$range_stop." -- ".$paths, $res, $status);
 	if ($status != 0)
 		fatal("Failed to diff");
@@ -1894,7 +1903,7 @@ Commands:
 
   apply - Start re-applying the series
 
-  diff - Show diff between current tree vs target tree
+  diff [files] - Show diff between current tree vs target tree
 
   status - Show current status of backport and git repo
 
