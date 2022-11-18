@@ -94,8 +94,9 @@ class Options {
 
 		// Handle defaults
 		if ($opt == "work-dir" || $opt == "git-dir") {
+			$val = realpath(".");
 			debug("Option from default value: ".$opt." = ".$val);
-			return realpath("./");
+			return $val;
 		}
 
 		if ($required)
