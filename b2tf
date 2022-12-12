@@ -59,6 +59,27 @@ class Patch {
 	}
 
 	/**
+	 * Search the patch for specified tag and return it's value if found
+	 *
+	 * @param $tag	The tag we're looking for
+	 *
+	 * @return Returns the value of the specified tag or FALSE if not found
+	 */
+	public function parse_for_tag($tag) {
+		$file = file_get_contents($this->filename);
+		$var = FALSE;
+
+		$lines = explode(PHP_EOL, $file);
+		foreach ($lines as $line) {
+			$this->get_tag($line, $tag, $var);
+			if ($var !== FALSE)
+				break;
+		}
+
+		return $var;
+	}
+
+	/**
 	 * Parse contents of patch file and store in Patch object.
 	 *
 	 * @param $filename Full path filename to the patch file
