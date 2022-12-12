@@ -422,6 +422,32 @@ class Log {
 	}
 
 	/**
+	 * Get all commits from the log
+	 *
+	 * @return Returns an array will all log commits in the format:
+	 *	   array[index] = array(upstream-commit-id => backport-commit-id)
+	 */
+	public function get_all_commits() {
+		$body = $this->get_body();
+		$body = explode(PHP_EOL, $body);
+
+		$commits = array();
+
+		for ($i = 0; $i < count($body); $i++) {
+			$line = $body[$i];
+			$line = explode(" ", $line);
+
+			if (strlen($line[0]) != 40)
+				continue;
+
+			if (isset($line[1]) && strlen($line[1]) == 40)
+				$commits[] = array($line[0], $line[1]);
+		}
+
+		return $commits;
+	}
+
+	/**
 	 * Get the last applied commit from log
 	 *
 	 * @return Returns commit as array [upstream_id, backport_id]
