@@ -35,6 +35,7 @@ class Patch {
 	var $signatures = array();	///< Array of signed-off-by tags
 	var $reviews = array();		///< Array of reviewied-by tags
 	var $cherry_pick;		///< Is the patch a cherry pick?
+	var $references = "";		///< SUSE References
 
 	/**
 	 * Get the contents of a tag and store in $var. $tag is not case sensitive
@@ -92,6 +93,10 @@ class Patch {
 			$this->get_tag($line, "Signed-off-by: ", $this->signatures);
 			$this->get_tag($line, "Reviewed-by: ", $this->reviews);
 			$this->get_tag($line, "(cherry picked from commit ", $this->cherry_pick);
+
+			// This is a hack but we only care about the first occurance of the tag references
+			if ($this->references == "")
+				$this->get_tag($line, "References: ", $this->references);
 		}
 
 		$this->subject = str_replace("  ", " ", $this->subject);
