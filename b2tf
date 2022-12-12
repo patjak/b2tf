@@ -1090,6 +1090,7 @@ function cmd_skip($argv)
 
 function cmd_setup($argv)
 {
+	Globals::$log = new Log();
 	$work_dir = Options::get("work-dir");
 	$branch = Options::get("branch");
 	$branch_point = Options::get("branch-point");
@@ -1185,6 +1186,7 @@ function cmd_sanity_check($argv)
 	$j = 0;
 	$num_faults = 0;
 	$num_fixed = 0;
+	$num_total = count($body);
 	foreach ($body as $line) {
 		$i++;
 		$line = explode(" ", $line);
@@ -1198,6 +1200,8 @@ function cmd_sanity_check($argv)
 			continue;
 		if (strlen($line[1]) != 40 && $line[1] != "empty")
 			continue;
+
+		echo "Checking ".round(($i / $num_total) * 100, 0)."%\r";
 
 		$p1 = new Patch(); // Upstream commit
 		$p1->parse_from_git($line[0]);
@@ -1218,7 +1222,7 @@ function cmd_sanity_check($argv)
 				
 			if (!GitRepo::cmp_commits($commit_id, $p1->commit_id) &&
 			    $subject == $p1->subject) {
-				info("Found cherry-pick: ".$commit_id." ".$subject);
+				debug("Found cherry-pick: ".$commit_id." ".$subject);
 
 				if ($fix === TRUE) {
 					info("Fixing: Change empty into cherry pick");
@@ -1244,7 +1248,7 @@ function cmd_sanity_check($argv)
 		$p2->subject = str_replace("  ", " ", $p2->subject);
 		$p3->subject = str_replace("  ", " ", $p3->subject);
 
-		debug("i=".$i." j=".$j);
+		debug("\ni=".$i." j=".$j);
 		debug("Upstream\t".$p1->commit_id." ".$p1->subject);
 		debug("In log\t\t".$p2->commit_id." ".$p2->subject);
 		debug("In repo\t\t".$p3->commit_id." ".$p3->subject);
@@ -1831,6 +1835,9 @@ function parse_options($argv)
 
 	// Commands that don't require the log file
 	switch ($command) {
+	case "setup":
+		cmd_setup($argv);
+		exit(0);
 	case "suse-fixes":
 		cmd_suse_fixes($argv);
 		exit(0);
@@ -1847,9 +1854,6 @@ function parse_options($argv)
 
 	// Commands that require the log file
 	switch($command) {
-	case "setup":
-		cmd_setup($argv);
-		exit(0);
 	case "export":
 		cmd_export($argv);
 		exit(0);
