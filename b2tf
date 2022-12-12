@@ -1677,6 +1677,24 @@ function get_suse_backports($suse_repo_path)
 	return $commits;
 }
 
+function get_suse_backports_with_filename()
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	exec("grep -RiI 'git-commit\|alt-commit\|no-fix' ".$suse_repo_path."/patches.suse/ | grep -v \"~\"", $res);
+
+	$backports = array();
+
+	foreach ($res as $line) {
+		$rows = explode(":", $line);
+		$filename = trim($rows[0]);
+		$commit_id = trim($rows[2]);
+
+		$backports[$commit_id] = $filename;
+	}
+
+	return $backports;
+}
+
 function get_suse_blacklists($suse_repo_path)
 {
 	$file = file_get_contents($suse_repo_path."/blacklist.conf");
@@ -1701,6 +1719,578 @@ function get_suse_blacklists($suse_repo_path)
 	}
 
 	return $list;
+}
+
+// Find the filename of the patch in the suse repo with the corresponding git-commit or alt-commit tag
+function find_suse_patch($commit_id)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	exec("grep -RI ".$commit_id." ".$suse_repo_path."/patches.suse/ | grep -i 'git-commit\|alt-commit\|no-fix' | grep -v \"~\"", $res);
+	if (count($res) != 1) {
+		var_dump($res);
+		fatal("Invalid number of results found when looking for commit: ".$commit_id);
+	}
+
+	$filename = explode(":", $res[0])[0];
+
+	return $filename;
+}
+
+function remove_patch_header($file)
+{
+	for ($i = 0; $i < count($file); $i++) {
+		$line = $file[$i];
+		unset($file[$i]);
+		if ($line == "---")
+			break;
+	}
+
+	return array_values($file);
+}
+
+function remove_patch_footer($file)
+{
+
+	$found = FALSE;
+
+	for ($i = 0; $i < count($file); $i++) {
+		$line = trim($file[$i]);
+
+		if ($line == "--")
+			$found = TRUE;
+
+		if ($found)
+			unset($file[$i]);
+	}
+
+	return array_values($file);
+}
+
+function trim_patch_tail($file)
+{
+	for ($i = count($file) - 1; $i >= 0; $i--) {
+		$line = trim($file[$i]);
+
+		if ($line == "")
+			unset($file[$i]);
+		else
+			break;
+	}
+
+	return array_values($file);
+}
+
+function diff_patchfiles($file1, $file2)
+{
+	$file1 = file_get_contents($file1);
+	$file2 = file_get_contents($file2);
+
+	$file1 = explode(PHP_EOL, $file1);
+	$file2 = explode(PHP_EOL, $file2);
+
+	$file1 = remove_patch_header($file1);
+	$file2 = remove_patch_header($file2);
+
+	$file1 = remove_patch_footer($file1);
+	$file2 = remove_patch_footer($file2);
+
+	$file1 = trim_patch_tail($file1);
+	$file2 = trim_patch_tail($file2);
+
+	$diff1 = __strip_diff($file1);
+	$diff2 = __strip_diff($file2);
+
+	file_put_contents("/tmp/1", $diff1);
+	file_put_contents("/tmp/2", $diff2);
+
+	exec("diff -Naur /tmp/1 /tmp/2", $res);
+	// exec("rm /tmp/1");
+	// exec("rm /tmp/2");
+
+	return implode(PHP_EOL, $res);
+}
+
+function cmd_suse_export($argv)
+{
+	$work_dir = Options::get("work-dir");
+	$git = Globals::$git;
+	$log = Globals::$log;
+	$start = Options::get("branch-point");
+	// Stop in this context is the tip of the branch and not range-stop
+	$stop = Options::get("branch");
+	$signature = Options::get("signature");
+	$refs = Options::get("refs");
+
+	$git->change_branch();
+
+	exec("mkdir -p ".$work_dir."/patches.suse");
+	exec("rm ".$work_dir."/patches.suse/*");
+
+	info("Exporting patches into patches.suse/...");
+	$git->cmd("git format-patch -o ".$work_dir."/patches.suse/ --no-renames --keep-subject ".$start."..".$stop);
+
+	$patches = Patch::get_patches($work_dir."/patches.suse");
+	$commits = $log->get_all_commits();
+
+	info("Adding patch tags...");
+
+	for ($i = 0; $i < count($patches); $i++) {
+		echo "Progress ".($i + 1)."/".count($patches)."\r";
+		$upstream_id = $commits[$i][0];
+		$backport_id = $commits[$i][1];
+
+		$p_backport = $patches[$i];
+		$p_upstream = new Patch();
+		$p_upstream->parse_from_git($upstream_id);
+
+		suse_format_patch($p_backport, $p_upstream, $signature, $refs);
+	}
+	msg("\nDone");
+}
+
+function cmd_suse_unblacklist($argv)
+{
+	$git = Globals::$git;
+	$log = Globals::$log;
+	$work_dir = Options::get("work-dir");
+	$suse_repo_path = Options::get("suse-repo-path");
+
+	$body = $log->get_body();
+	$body = explode(PHP_EOL, $body);
+
+	info("Unblacklisting patches...");
+	$patches = Patch::get_patches($work_dir."/patches.suse");
+	$matches = array();
+	$blacklists = get_suse_blacklists($suse_repo_path);
+
+	for ($i = 0; $i < count($body); $i++) {
+		$line = explode(" ", $body[$i]);
+		if (strlen($line[0]) == 40 && strlen($line[1]) == 40) {
+
+			echo "Progress: ".round(($i / count($body)) * 100, 0)."%\r";
+
+			$p_upstream = new Patch();
+			$p_upstream->parse_from_git($line[0]);
+
+			if (in_array($p_upstream->commit_id, $blacklists)) {
+				$matches[] = $p_upstream->commit_id;
+				msg("Found blacklisted patch: ".$p_upstream->commit_id." ".$p_upstream->subject);
+			}
+		}
+	}
+
+	// Remove blacklist entries
+	$file = file_get_contents($suse_repo_path."/blacklist.conf");
+	$lines = explode(PHP_EOL, $file);
+
+	for ($i = 0; $i < count($lines); $i++) {
+		$line = $lines[$i];
+		$rows = explode(" ", $line);
+		if (in_array($rows[0], $matches))
+			unset($lines[$i]);
+	}
+
+	$file = implode(PHP_EOL, $lines);
+	file_put_contents($suse_repo_path."/blacklist.conf", $file);
+
+	if (count($matches) > 0)
+		msg("Blacklisted patches found. Commit changes in blacklist.conf and rerun this command to continue.");
+	else
+		msg("No blacklisted patches found.");
+}
+
+// Remove a patch in patches.suse/ from series.conf
+function remove_from_series_conf($filename)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+
+	$file = file_get_contents($suse_repo_path."/series.conf");
+	if ($file === FALSE)
+		return TRUE;
+
+	$file = explode(PHP_EOL, $file);
+
+	for ($i = 0; $i < count($file); $i++) {
+		$line = trim($file[$i]);
+
+		if ($line == "patches.suse/".$filename) {
+			unset($file[$i]);
+			break;
+		}
+	}
+
+	$file = implode(PHP_EOL, $file);
+	$ret = file_put_contents($suse_repo_path."/series.conf", $file);
+
+	if ($ret === FALSE)
+		return TRUE;
+}
+
+// Insert a patch from pathces.suse/ to series.conf
+function insert_into_series_conf($filename)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+
+	exec("cd ".$suse_repo_path." && ./scripts/git_sort/series_insert.py patches.suse/".$filename, $code);
+
+	return $code;
+}
+
+
+// This command replaces selected patches from the SUSE kernel with our exported backports
+function cmd_suse_replace($argv)
+{
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$work_dir = Options::get("work-dir");
+	$suse_repo_path = Options::get("suse-repo-path");
+
+	$git->change_branch();
+
+	$suse_backports = get_suse_backports_with_filename();
+	$patches = Patch::get_patches($work_dir."/patches.suse");
+	$commits = $log->get_all_commits();
+	$suse_deletions = array();
+	$allowed_refs = array();
+	$disallowed_refs = array();
+
+	for ($i = 0; $i < count($patches); $i++) {
+		$p_backport = $patches[$i];
+		$upstream_id = $commits[$i][0];
+		$backport_id = $commits[$i][1];
+
+		if ($p_backport->commit_id != $backport_id) {
+			fatal("Exported patch commit id doesn't match log id\n".
+			      $p_backport->commit_id." != ".$backport_id);
+		}
+
+		echo "\rProgress: ".round(($i + 1) / count($patches) * 100, 0)."%";
+
+		// Check if patch is already backported
+		$old_refs = "";
+		if (array_key_exists($upstream_id, $suse_backports)) {
+			$filename = $suse_backports[$upstream_id];
+
+			$p_suse = new Patch();
+			$p_suse->parse($filename);
+
+			$replace = TRUE; // Are we allowed to replace this SUSE patch?
+			$old_refs = explode(" ", $p_suse->references);
+			if (count($old_refs) < 1) {
+				var_dump($old_refs);
+				fatal("Invalid refs");
+			}
+
+			$stop = FALSE;
+			$skip = FALSE;
+
+			foreach ($old_refs as $old_ref) {
+				if (in_array($old_ref, $disallowed_refs))
+					$skip = TRUE;
+			}
+
+			if ($skip)
+				continue;
+
+			// Check all references in the old patch to see if we are allowed to delete it or not
+			foreach ($old_refs as $old_ref) {
+				if (in_array($old_ref, $allowed_refs))
+					continue;
+
+				msg("\n\n".$p_backport->commit_id." ".$p_backport->subject);
+
+				$ask = "v";
+				$git->cmd("git show -p --stat ".$upstream_id." > /tmp/".$upstream_id.".patch");
+				$diff = diff_patchfiles("/tmp/".$upstream_id.".patch", $p_suse->filename);
+				file_put_contents("/tmp/diff.diff", $diff);
+
+				if (trim($diff) == "") {
+					info("Patches are identical. Keeping the existing SUSE patch.");
+					$replace = FALSE;
+					break;
+				}
+
+				// Print the URLs for quick access to JIRA or Bugzilla tickets
+				if (strncmp("jsc#", $old_ref, 4) == 0)
+					info("https://jira.suse.com/browse/".substr($old_ref, 4));
+				if (strncmp("bsc#", $old_ref, 4) == 0)
+					info("https://bugzilla.suse.com/show_bug.cgi?id=".substr($old_ref, 4));
+
+				$skip = FALSE;
+				while ($ask == "v" && trim($diff) != "") {
+
+					msg("Replace Patch with reference: ".$old_ref."?");
+
+					$ask = Util::ask("(Y)es, (n)o, (a)lways, n(e)ver, (v)iew patch or (s)top: ", array("y", "n", "a", "e", "v", "s"), "y");
+
+					if ($ask == "y") {
+						$replace = TRUE;
+					} else if ($ask == "a") {
+						$allowed_refs[] = $old_ref;
+						$replace = TRUE;
+					} else if ($ask == "e") {
+						$disallowed_refs[] = $old_ref;
+						$skip = TRUE;
+						$replace = FALSE;
+					} else if ($ask == "v") {
+						passthru("vim -O ".$p_suse->filename." /tmp/diff.diff /tmp/".$upstream_id.".patch");
+					} else if ($ask == "s") {
+						$stop = TRUE;
+					} else {
+						$skip = TRUE; // Don't check the other references
+						$replace = FALSE;
+					}
+				}
+
+				exec("rm /tmp/diff.diff /tmp/".$upstream_id.".patch");
+
+				if ($skip || $stop)
+					break;
+			}
+
+			if ($stop)
+				break;
+
+			if ($replace) {
+				$old_refs = $p_suse->references;
+
+				// Mark the SUSE patch to be replaced
+				$suse_deletions[$filename] = $p_backport->filename;
+				debug("Going to update: kernel-source/".basename($filename));
+			}
+		}
+	}
+
+	if (count($suse_deletions) == 0) {
+		msg("No SUSE patches needed to be updated");
+		return;
+	}
+
+	info("Updating existing SUSE patches...");
+
+	$i = 1;
+	$total = count($suse_deletions);
+	foreach ($suse_deletions as $suse_filename => $backport_filename ) {
+
+		$p_suse = new Patch();
+		$p_suse->parse($suse_filename);
+
+		$p_backport = new Patch();
+		$p_backport->parse($backport_filename);
+
+		$suse_filename = basename($suse_filename);
+		$backport_filename = basename($backport_filename);
+
+		msg($suse_filename);
+		msg("Progress ".$i++."/".$total);
+
+		if ($p_suse->references != "" && $p_suse->references == $p_backport->references) {
+			msg("Patch is already replaced. Skipping: ".$suse_filename);
+			continue;
+		}
+
+		// IMPORTANT: Get the tags before we replace the file
+		$git_tag_suse = $p_suse->parse_for_tag("Git-commit: ");
+		$git_tag_backport = $p_backport->parse_for_tag("Git-commit: ");
+
+		// Now we can replace the file
+		exec("cp ".$work_dir."/patches.suse/".$backport_filename." ".$suse_repo_path."/patches.suse/".$suse_filename);
+
+		if ($git_tag_suse === FALSE || $git_tag_backport === FALSE)
+			fatal("SUSE patch or backported patch is missing the Git-commit tag");
+
+		/*
+		*/
+
+		// Sometimes we replace a commit with a cherry-pick (or the otherway around) so series.conf needs adjustment
+		if ($git_tag_suse != $git_tag_backport) {
+			info("Git-commit tag doesn't match. Updating series.conf");
+			info("\tsuse git-commit:\t".$git_tag_suse);
+			info("\tbackport git-commit:\t".$git_tag_backport);
+
+			if (remove_from_series_conf($suse_filename))
+				fatal("Failed to remove patch from series.conf");
+
+			if (insert_into_series_conf($suse_filename))
+				fatal("Failed to insert patch into series.conf");
+		}
+
+		$code = 1;
+		$refresh = FALSE;
+		$skip = FALSE;
+		while ($code != 0) {
+			unset($lines);
+			exec("cd ".$suse_repo_path." && ./scripts/sequence-patch.sh --dir=/dev/shm/tmp --rapid > /dev/null", $lines, $code);
+			if ($code != 0) {
+				// Check if rapidquilt crashed
+				if ($code > 1) {
+					error("rapidquilt crashed. Trying to rerun.");
+					continue;
+				}
+
+				foreach ($lines as $line)
+					echo $line;
+
+				// Check if patch can be applied with some fuzz
+				unset($output);
+				exec("cd /dev/shm/tmp/current && quilt push", $output, $push_code);
+
+				// Fuzzing succeeded so continue
+				if ($push_code == 0) {
+					unset($output);
+					exec("cd /dev/shm/tmp/current && ./refresh_patch.sh", $output, $refresh_code);
+					if ($refresh_code != 0)
+						fatal("Refresh patch failed");
+
+					// We need scripts/log here to create the correct commit msg
+					$refresh = TRUE;
+					continue;
+				} else {
+					$refresh = TRUE;
+					error("Sequencing patches failed. Fix it and refresh the problematic patch.");
+					$ask = Util::ask("(R)etry or (s)kip: ", array("r", "s"), "r");
+
+					if ($ask == "s") {
+						exec("cd ".$suse_repo_path." && git restore patches.suse/".$suse_filename);
+						$skip = TRUE;
+					}
+				}
+			}
+		}
+
+		if ($skip)
+			continue;
+
+		$msg = "Update patches.suse/".$suse_filename." (".$p_backport->references.")";
+		// $msg = Util::word_wrap($msg, 62);
+		$msg = wordwrap($msg, 62, "\n");
+
+		file_put_contents("/tmp/commit-msg", $msg);
+
+		if ($refresh) {
+			passthru("cd ".$suse_repo_path." && ./scripts/log", $code);
+			if ($code != 0)
+				fatal("Failed to run scripts/log on patch");
+		} else {
+			passthru("cd ".$suse_repo_path." && git add series.conf", $code);
+			passthru("cd ".$suse_repo_path." && git add patches.suse/".$suse_filename, $code);
+			passthru("cd ".$suse_repo_path." && git commit -F /tmp/commit-msg", $code);
+			if ($code != 0)
+				fatal("Failed to commit patch");
+			// passthru("rm /tmp/commit-msg");
+		}
+	}
+
+	msg("\nDone. Apply your changes and refresh patches in SUSE kernel-source.");
+}
+
+function cmd_suse_apply($argv)
+{
+	$work_dir = Options::get("work-dir");
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+	$suse_repo_path = Options::get("suse-repo-path");
+
+	$patches = Patch::get_patches($work_dir."/patches.suse");
+	$suse_backports = get_suse_backports($suse_repo_path);
+
+	for ($i = 0; $i < count($patches); $i++) {
+		$p = $patches[$i];
+
+		$filename = basename($p->filename);
+
+		msg(($i + 1)."/".count($patches).": Applying ".$filename);
+
+		$upstream_id = $p->parse_for_tag("Git-commit: ");
+		if ($upstream_id === FALSE)
+			fatal("Couldn't find git-commit tag in patch");
+
+		if (in_array($upstream_id, $suse_backports)) {
+			msg("Already backported.");
+			continue;
+		}
+
+		unset($output);
+		exec("cp ".$p->filename." ".$suse_repo_path."/patches.suse/", $output, $code);
+		if ($code != 0)
+			fatal("Failed to copy patch into suse repo");
+
+		unset($output);
+		exec("cd ".$suse_repo_path." && ./scripts/git_sort/series_insert.py patches.suse/".$filename, $output, $code);
+
+		if ($code != 0) {
+			foreach ($output as $line)
+				echo $line;
+		}
+
+		$code = 1;
+		$refresh = FALSE;
+		$skip = FALSE;
+		while ($code != 0) {
+			unset($output);
+			exec("cd ".$suse_repo_path." && ./scripts/sequence-patch.sh --dir=/dev/shm/tmp --rapid > /dev/null", $output, $code);
+			if ($code != 0) {
+				// Check if rapidquilt crashed
+				if ($code > 1) {
+					error("rapidquilt crashed. Trying to rerun.");
+					continue;
+				}
+
+				foreach ($output as $line)
+					echo $line;
+
+				// Check if patch can be applied with some fuzz
+				unset($output);
+				exec("cd /dev/shm/tmp/current && quilt push", $output, $push_code);
+
+				// Fuzzing succeeded so continue
+				if ($push_code == 0) {
+					unset($output);
+					exec("cd /dev/shm/tmp/current && ./refresh_patch.sh", $output, $refresh_code);
+					if ($refresh_code != 0)
+						fatal("Refresh patch failed");
+
+					// We need scripts/log here to create the correct commit msg
+					$refresh = TRUE;
+					continue;
+				} else {
+					$refresh = TRUE;
+				}
+
+				error("Sequencing patch failed. Fix it and refresh the problematic patches.");
+				$ask = Util::ask("(R)etry or (s)kip: ", array("r", "s"), "r");
+
+				if ($ask == "s") {
+					exec("cd ".$suse_repo_path." && rm patches.suse/".$filename);
+					exec("cd ".$suse_repo_path." && git restore series.conf");
+					$skip = TRUE;
+					break;
+				}
+			}
+		}
+
+		if ($skip)
+			continue;
+
+		if ($refresh) {
+			exec("cd ".$suse_repo_path." && git add patches.suse/".$filename);
+			passthru("cd ".$suse_repo_path." && ./scripts/log", $code);
+			if ($code != 0)
+				fatal("Failed to run scripts/log on patch");
+		} else {
+			$msg = $p->subject." (".$p->references.")";
+			file_put_contents("/tmp/commit-msg", $msg);
+
+			unset($output);
+			exec("cd ".$suse_repo_path." && git add ./series.conf && git add patches.suse/".$filename." && git commit -a -F /tmp/commit-msg", $output, $code);
+			exec("rm /tmp/commit-msg");
+
+			if ($code != 0)
+				fatal("Failed to commit patch");
+		}
+	}
 }
 
 function cmd_format_suse($argv)
@@ -1890,6 +2480,18 @@ function parse_options($argv)
 	case "list-cherry-picks":
 		cmd_list_cherry_picks($argv);
 		exit(0);
+	case "suse-export":
+		cmd_suse_export($argv);
+		exit(0);
+	case "suse-unblacklist":
+		cmd_suse_unblacklist($argv);
+		exit(0);
+	case "suse-replace":
+		cmd_suse_replace($argv);
+		exit(0);
+	case "suse-apply":
+		cmd_suse_apply($argv);
+		exit(0);
 	}
 }
 
@@ -1964,6 +2566,14 @@ Commands:
   status - Show current status of backport and git repo
 
   resolve <commit-id> - Resolve conflicts from the specified commit
+
+  suse-export - Export the finished set of backported patches
+
+  suse-unblacklist - Remove all blacklist entries for patches we're backporting
+
+  suse-delete - Choose which of the already backported patches we keep or replace
+
+  suse-apply - Finally apply the remaining patches to the SUSE tree
 
   suse-fixes - Automate backport of git-fixes to the SUSE repo
     --only-alt-commits	- Skip everything except Alt-commits
