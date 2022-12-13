@@ -587,6 +587,28 @@ class Log {
 			fatal("Last commit in log doesn't match last commit in git repo\n".
 			      $p1->subject." != ".$last_subject);
 	}
+
+	/**
+	 * Remove all the backport commit ids from the log
+	 */
+	function reset_body() {
+		$body = $this->get_body();
+		$lines = explode(PHP_EOL, $body);
+
+		$new_body = "";
+
+		foreach ($lines as $line) {
+			$rows = explode(" ", $line);
+			if (isset($rows[0]) && isset($rows[1]) && strlen($rows[0]) == 40 &&
+			    strlen($rows[1]) == 40)
+				$line = $rows[0];
+
+			$new_body .= $line.PHP_EOL;
+		}
+
+		$this->set_body($new_body);
+		$this->save();
+	}
 }
 
 class GitRepo {
@@ -1172,23 +1194,14 @@ function cmd_restart($argv)
 
 	if ($git->check_am_session()) {
 		$git->cmd("git am --abort");
+	} else if ($git->check_cherrypick_session()) {
+		$git->cmd("git cherry-pick --abort");
 	}
 
 	$git->cmd("git checkout master");
 	$git->cmd("git branch -D ".$branch);
 
-	$log->set_body("");
-	$files = get_patch_filenames($work_dir."/patches");
-	$patches = array();
-	foreach ($files as $file) {
-		$p = new Patch();
-		$p->parse($file);
-		$patches[] = $p;
-		$log->append_patch($p);
-	}
-
-	$log->save($work_dir."/commits.log");
-
+	$log->reset_body();
 }
 
 function cmd_sanity_check($argv)
