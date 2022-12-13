@@ -468,6 +468,8 @@ class Log {
 				continue;
 			if (count($line) == 1)
 				return $prev_line;
+			if (strlen($line[1]) != 40)
+				continue;
 			if ($line[1] == "")
 				return $prev_line;
 
@@ -552,12 +554,18 @@ class Log {
 	 */
 	function sanity_check_last() {
 		$git = Globals::$git;
+
 		// Sanity check log vs git-repo
+
 		$last = $this->get_last_commit();
+		if ($last == "")
+			return;
+
+		$p1 = new Patch(); // Upstream commit
+		$p1->parse_from_git($last[0]);
+
 		if (isset($last[1]) && strlen($last[1]) == 40) {
-			$p1 = new Patch(); // Upstream commit
 			$p2 = new Patch(); // Backport commit
-			$p1->parse_from_git($last[0]);
 			$p2->parse_from_git($last[1]);
 			if ($p1->subject != $p2->subject) {
 				fatal("Commit log is corrupted. Must be fixed manually.\n(".
