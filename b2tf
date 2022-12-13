@@ -647,17 +647,17 @@ class GitRepo {
 
 	// Returns an array of unmerged paths
 	public function get_unmerged_paths() {
-		return $this->parse_status_paths("Unmerged paths:", 3);
+		return $this->parse_status_paths("Unmerged paths:", 2);
 	}
 
 	// Returns an array of paths to be commited
 	public function get_modified_paths() {
-		return $this->parse_status_paths("Changes to be committed:", 2);
+		return $this->parse_status_paths("Changes to be committed:", 1);
 	}
 
 	// Returns an array of paths not staged for commit
 	public function get_unstaged_paths() {
-		return $this->parse_status_paths("Changes not staged for commit:", 2);
+		return $this->parse_status_paths("Changes not staged for commit:", 3);
 	}
 
 	public function add_all_unmerged() {
@@ -672,6 +672,8 @@ class GitRepo {
 			if ($type == "both modified")
 				$this->cmd("git add ".$u);
 			else if ($type == "deleted by us")
+				$this->cmd("git rm ".$u);
+			else if ($type == "deleted by them")
 				$this->cmd("git rm ".$u);
 			else
 				error("Unknown unmerged type: ".$u);
@@ -983,21 +985,29 @@ function cmd_apply($argv)
 
 	$git->change_branch();
 
-	$patches = Patch::get_patches($work_dir."/patches");
+	$commits = $log->get_all_commits();
 
-	$num_patches = count($patches);
-	if ($num_patches == 0)
-		fatal("No patches to apply. Did you forget to run export?");
+	$num_commits = count($commits);
+	if ($num_commits == 0)
+		fatal("No commits to apply. Did you forget to run export?");
 
 	$log->sanity_check_last();
 
 	$next_commit = $log->get_next_commit();
-	$i = $git->find_commit_index($next_commit, $patches);
-	for (; $i < $num_patches; $i++) {
-		$p = $patches[$i];
+
+	for ($i = 0; $i < $num_commits; $i++) {
+		if ($commits[$i][0] == $next_commit) {
+			debug($commits[$i][0]." == ".$next_commit);
+			break;
+		}
+	}
+
+	for (; $i < $num_commits; $i++) {
+		$p = new Patch();
+		$p->parse_from_git($commits[$i][0]);
 
 		// Check if we're in an am session
-		if ($git->check_am_session()) {
+		if ($git->check_cherrypick_session()) {
 			$unmerged = $git->get_unmerged_paths();
 			$unstaged = $git->get_unstaged_paths();
 
@@ -1023,27 +1033,27 @@ function cmd_apply($argv)
 			}
 
 			if (count($git->get_modified_paths()) > 0) {
-				debug("In AM session with modified paths. git am --contine");
-				$git->cmd("git am --continue");
+				debug("In cherry-pick session with modified paths. git cherry-pick --contine");
+				// $git->cmd("git cherry-pick --continue");
+				passthru("cd ".$git->dir." && git cherry-pick --continue");
 
 				$last_id = $git->get_current_commit_id();
 				$log->update_commit($p->commit_id, $last_id);
-				green("Applied\t(".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+				green("Applied\t(".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 			} else {
-				debug("In AM session WITHOUT modified paths. git am --skip");
-				$git->cmd("git am --skip");
+				debug("In cherry-pick session WITHOUT modified paths. git cherry-pick --skip");
+				$git->cmd("git cherry-pick --skip");
 				$log->update_commit($p->commit_id, "empty");
-				info("Empty\t(".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+				info("Empty\t(".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 			}
 
 			continue;
 		}
 
-		$filename = $p->filename;
 		$output_am = "";
 
 		$old_id = $git->get_current_commit_id();
-		$git->cmd("git am --3way ".$filename." 2> /dev/stdout", $output_am, $status);
+		$git->cmd("git cherry-pick ".$p->commit_id." 2> /dev/stdout", $output_am, $status);
 		$new_id = $git->get_current_commit_id();
 
 		// Check if patch did not apply
@@ -1053,7 +1063,7 @@ function cmd_apply($argv)
 
 			$cherry_id = $git->check_for_cherry_pick($p);
 			if ($cherry_id !== FALSE) {
-				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+				info("Cherry picked (".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
 				$git->cmd("git am --abort");
 				continue;
@@ -1066,7 +1076,7 @@ function cmd_apply($argv)
 				error($u);
 
 			delimiter();
-			error("Failed patch: ".basename($p->filename));
+			error("Failed commit: ".$p->subject);
 
 			delimiter();
 			echo "Fix conflict and rerun apply.\n";
@@ -1089,23 +1099,17 @@ function cmd_apply($argv)
 		if ($old_id == $new_id) {
 			$cherry_id = $git->check_for_cherry_pick($p);
 			if ($cherry_id !== FALSE) {
-				info("Cherry picked (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+				info("Cherry picked (".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 				$log->update_commit($p->commit_id, "cherry-picked-by ".$cherry_id);
 				continue;
 			}
 
-			info("Empty\t(".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
+			info("Empty\t(".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 			$log->update_commit($p->commit_id, "empty");
 			continue;
 		}
 		$log->update_commit($p->commit_id, $new_id);
-		green("Applied (".($i + 1)."/".$num_patches.") ".$p->commit_id." ".$p->subject);
-	
-/*
-		$git->cmd("make -j16 M=drivers/gpu/drm 2> /dev/null", $res, $status);
-		if ($status != 0)
-			error("Compilation failed!");
-*/
+		green("Applied (".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 	}
 
 	exit();
