@@ -440,6 +440,9 @@ class Log {
 			if (strlen($line[0]) != 40)
 				continue;
 
+			if (strlen($line[0]) == 40 && !isset($line[1]))
+				$commits[] = array($line[0], FALSE);
+
 			if (isset($line[1]) && strlen($line[1]) == 40)
 				$commits[] = array($line[0], $line[1]);
 		}
@@ -489,6 +492,7 @@ class Log {
 			$line = explode(" ", $line);
 			if ($line[0] == "#")
 				continue;
+
 			if (count($line) == 1)
 				return $line[0];
 			if ($line[1] == "")
@@ -1839,6 +1843,9 @@ function cmd_suse_export($argv)
 		$upstream_id = $commits[$i][0];
 		$backport_id = $commits[$i][1];
 
+		if ($backport_id === FALSE)
+			fatal("upstream id ".$upstream_id." was never backported");
+
 		$p_backport = $patches[$i];
 		$p_upstream = new Patch();
 		$p_upstream->parse_from_git($upstream_id);
@@ -1959,6 +1966,9 @@ function cmd_suse_replace($argv)
 		$p_backport = $patches[$i];
 		$upstream_id = $commits[$i][0];
 		$backport_id = $commits[$i][1];
+
+		if ($backport_id === FALSE)
+			fatal("Upstream id ".$upstream_id." was never backported");
 
 		if ($p_backport->commit_id != $backport_id) {
 			fatal("Exported patch commit id doesn't match log id\n".
