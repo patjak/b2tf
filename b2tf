@@ -551,6 +551,7 @@ class Log {
 	 * @param $git Git repo to check against
 	 */
 	function sanity_check_last() {
+		$git = Globals::$git;
 		// Sanity check log vs git-repo
 		$last = $this->get_last_commit();
 		if (isset($last[1]) && strlen($last[1]) == 40) {
@@ -563,6 +564,20 @@ class Log {
 				      $p1->subject." != ".$p2->subject.")");
 			}
 		}
+
+		if ($last == "")
+			return;
+
+		$git->cmd("git log --pretty=format:%s -n1", $output, $status);
+
+		if (isset($output[0]))
+			$last_subject = $output[0];
+		else
+			$last_subject = "";
+
+		if ($last_subject != $p1->subject)
+			fatal("Last commit in log doesn't match last commit in git repo\n".
+			      $p1->subject." != ".$last_subject);
 	}
 }
 
