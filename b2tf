@@ -7,7 +7,7 @@ require_once("suse-fixes.php");
 // How long back in commit history we check for cherry picks
 define("CHERRY_PICK_HISTORY", 4000);
 
-function msg($msg) { echo $msg."\n"; }
+function msg($msg, $eol = TRUE) { echo $msg; if ($eol) { echo "\n"; } }
 function fatal($msg) { echo "\e[31m".$msg."\e[0m\n"; if (Globals::$debug) { debug_print_backtrace(); } exit(1); }
 function error($msg) { echo "\e[31m".$msg."\e[0m\n"; }
 function info($msg) { echo "\e[36m".$msg."\e[0m\n"; }
