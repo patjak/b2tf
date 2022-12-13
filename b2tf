@@ -1508,21 +1508,21 @@ function cmd_status($argv)
 
 	if (count($modified) > 0) {
 		echo "Modified:\n";
-		foreach ($modified as $m) {
+		foreach ($modified as $m => $type) {
 			green("\t".$m);
 		}
 	}
 
 	if (count($unstaged) > 0) {
 		echo "Unstaged:\n";
-		foreach ($unstaged as $u) {
+		foreach ($unstaged as $u => $type) {
 			green("\t".$u);
 		}
 	}
 
 	if (count($unmerged) > 0) {
 		echo "Unmerged:\n";
-		foreach ($unmerged as $u) {
+		foreach ($unmerged as $u => $type) {
 			error("\t".$u);
 		}
 	}
