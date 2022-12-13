@@ -2344,14 +2344,16 @@ function cmd_format_suse($argv)
 		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
 
 	$suse_backports = get_suse_backports($suse_repo_path);
+	$suse_backports_with_filename = get_suse_backports_with_filename();
+	$blacklists = get_suse_blacklists($suse_repo_path);
+	$blacklists_found = array();
+
+	// When already backported commits are found we check the "references" tag agains this list of allowed tags to see if we are allowed to delete them or not
+	$allowed_refs = array();
+
+	$deletions = array();
 
 	$git->change_branch();
-
-	exec("mkdir -p ".$work_dir."/patches.suse");
-	exec("rm ".$work_dir."/patches.suse/*");
-
-	info("Exporting patches...");
-	$git->cmd("git format-patch -o ".$work_dir."/patches.suse/ --no-renames --keep-subject ".$start."..".$stop);
 
 	$body = $log->get_body();
 	$body = explode(PHP_EOL, $body);
@@ -2365,6 +2367,8 @@ function cmd_format_suse($argv)
 			if (!isset($patches[$j]))
 				fatal("More patches in log than in backport!");
 
+			echo "Progress: ".round(($i / count($body)) * 100, 0)."%\r";
+
 			// We get more correct subject lines when parsing from git so do that here
 			$p_file = $patches[$j];
 
@@ -2374,23 +2378,103 @@ function cmd_format_suse($argv)
 			$p2 = new Patch();
 			$p2->parse_from_git($line[0]);
 
+			if ($p1->subject != $p2->subject)
+				fatal("Subject not matching\n".$p1->subject." != ".$p2->subject);
+
+			msg("(".($j + 1)."/".count($patches).") ".$p2->commit_id." ".$p2->subject);
+
+
+			// Check if patch is already backported
+			$old_refs = "";
 			if (in_array($p2->commit_id, $suse_backports)) {
-				// Patch is already backported so skip it
-				msg("(already backported) ".$p_file->commit_id." ".$p_file->subject);
-				exec("rm ".$work_dir."/patches.suse/".basename($p_file->filename));
-				$j++;
-				continue;
+				$filename = $suse_backports_with_filename[$p2->commit_id];
+
+				$p_old = new Patch();
+				$p_old->parse($filename);
+
+				$allowed = TRUE;
+				$old_refs = explode(" ", $p_old->references);
+				if (count($old_refs) < 1) {
+					var_dump($old_refs);
+					fatal("Invalid refs");
+				}
+
+				// Check all references in the old patch to see if we are allowed to delete it or not
+				foreach ($old_refs as $old_ref) {
+					if (in_array($old_ref, $allowed_refs))
+						continue;
+
+					// Print the URLs for quick access to JIRA or Bugzilla tickets
+					if (strncmp("jsc#", $old_ref, 4) == 0)
+						info("\nhttps://jira.suse.com/browse/".substr($old_ref, 4));
+					if (strncmp("bsc#", $old_ref, 4) == 0)
+						info("\nhttps://bugzilla.suse.com/show_bug.cgi?id=".substr($old_ref, 4));
+
+
+					$ask = "v";
+					while ($ask == "v") {
+						$ask = Util::ask("Allow deletion of patches with reference (".$old_ref.")? ".
+								 "(Y)es, (n)o or (v)iew patch: ", array("y", "n", "v"), "y");
+						if ($ask == "y") {
+							$allowed_refs[] = $old_ref;
+						} else if ($ask == "v") {
+							$git->cmd("git show -p --stat ".$p1->commit_id." > /tmp/".$p1->commit_id.".patch");
+							$diff = diff_patchfiles("/tmp/".$p1->commit_id.".patch", $p_old->filename);
+							file_put_contents("/tmp/diff.diff", $diff);
+
+							passthru("vim -O ".$p_old->filename." /tmp/diff.diff /tmp/".$p1->commit_id.".patch");
+						} else {
+							$allowed = FALSE;
+						}
+					}
+				}
+
+				// We are not allowed to delete the already existing patch
+				if (!$allowed) {
+					exec("rm ".$work_dir."/patches.suse/".basename($p_file->filename));
+					$j++;
+					continue;
+				}
+
+				$old_refs = $p_old->references;
+
+				// Mark the old patch for deletion
+				$deletions[] = $filename;
+
+			} else if (in_array($p2->commit_id, $blacklists)) {
+				$blacklists_found[] = $p2->commit_id;
 			}
 
-			if ($p1->subject != $p2->subject)
-				error("Subject not matching\n".$p1->subject." != ".$p2->subject);
-
-			suse_format_patch($p_file, $p2, $signature, $refs);
-			msg("(".($j + 1)."/".count($patches).") ".$p2->commit_id." ".$p2->subject);
+			// Optimization for when we know multiple runs are needed
+			if (count($blacklists_found) == 0 && count($deletions) == 0)
+				suse_format_patch($p_file, $p2, $signature, $old_refs." ".$refs);
 
 			$suse_filenames .= "patches.suse/".basename($p_file->filename)." ";
 			$j++;
 		}
+	}
+
+	if (count($deletions) > 0) {
+		info("Deleting existing duplicates...");
+		$file = file_get_contents($suse_repo_path."/series.conf");
+		$lines = explode(PHP_EOL, $file);
+		for ($i = 0; $i < count($lines); $i++) {
+			$line = trim($lines[$i]);
+
+			foreach ($deletions as $del) {
+				if (strcmp(basename($line), basename($del)) == 0) {
+					unset($lines[$i]);
+				}
+			}
+		}
+		$file = implode(PHP_EOL, $lines);
+		file_put_contents($suse_repo_path."/series.conf", $file);
+
+		foreach ($deletions as $del) {
+			exec("cd ".$suse_repo_path." && git rm ".$del);
+		}
+
+		fatal("Already existing backports found. They are marked as deleted. Please commit results and rerun this command to continue");
 	}
 
 	exec("cp ".$work_dir."/patches.suse/* ".$suse_repo_path."/patches.suse/");
