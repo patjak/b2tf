@@ -599,9 +599,14 @@ class Log {
 
 		foreach ($lines as $line) {
 			$rows = explode(" ", $line);
-			if (isset($rows[0]) && isset($rows[1]) && strlen($rows[0]) == 40 &&
-			    strlen($rows[1]) == 40)
-				$line = $rows[0];
+			if (isset($rows[0]) && isset($rows[1]) && strlen($rows[0]) == 40) {
+				if (strlen($rows[1]) == 40 ||
+				    $rows[1] == "empty" ||
+				    $rows[1] == "cherry-picked-by" ||
+				    $rows[1] == "skip") {
+					$line = $rows[0];
+				}
+			}
 
 			$new_body .= $line.PHP_EOL;
 		}
