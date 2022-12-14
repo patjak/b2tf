@@ -1202,6 +1202,8 @@ function cmd_restart($argv)
 	$git->cmd("git branch -D ".$branch);
 
 	$log->reset_body();
+
+	$git->change_branch();
 }
 
 function cmd_sanity_check($argv)
