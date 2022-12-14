@@ -1103,7 +1103,7 @@ function cmd_apply($argv)
 				error($u);
 
 			delimiter();
-			error("Failed commit: ".$p->subject);
+			error("Failed commit: ".$p->commit_id." ".$p->subject);
 
 			delimiter();
 			echo "Fix conflict and rerun apply.\n";
