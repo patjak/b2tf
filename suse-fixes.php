@@ -124,6 +124,33 @@ function parse_fixes_simple($lines, $git)
 	return $patches;
 }
 
+function parse_cvs_url($url, $git)
+{
+	$file = file_get_contents($url);
+	if ($file === FALSE)
+		fatal("URL could not be opened: ".$url);
+
+	$hashes = array();
+
+	$lines = explode(PHP_EOL, $file);
+	foreach ($lines as $line) {
+		$hash = explode(",", $line)[0];
+		if (strlen($hash) != 40)
+			continue;
+
+		$res = NULL;
+		$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+
+		if ($status != 0)
+			debug("Unknown hash: ".$hash);
+		else
+			$hashes[] = $hash;
+
+	}
+
+	return $hashes;
+}
+
 function load_fixes_file($fixes_file, $work_dir, $git)
 {
 	$file = file_get_contents($fixes_file);
@@ -497,7 +524,7 @@ function cmd_suse_fixes($argv)
 		$refs = "git-fixes";
 
 	$fixes_file = Options::get("fixes-file", FALSE);
-
+	$fixes_url = Options::get("fixes-url", FALSE);
 	$skip_review = Options::get("skip-review", FALSE);
 
 	// Skip all patches that doesn't immediately applies
@@ -545,6 +572,8 @@ function cmd_suse_fixes($argv)
 
 	if ($fixes_file !== FALSE) {
 		$patches = load_fixes_file($fixes_file, $work_dir, $git);
+	} else if ($fixes_url !== FALSE) {
+		$patches = parse_cvs_url($fixes_url, $git);
 	} else {
 		msg("No fixes file specified.");
 		$hashes = Util::get_line("Enter hashes manually (separated by spaces): ");

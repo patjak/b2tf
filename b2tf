@@ -2653,6 +2653,7 @@ $opts = array(
 	"fix",
 	"force",
 	"fixes-file:",
+	"fixes-url:",
 	"file-type:",
 	"suse-repo-path:",
 	"only-alt-commits",
