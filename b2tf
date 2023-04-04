@@ -2575,6 +2575,9 @@ function parse_options($argv)
 	case "resolve":
 		cmd_resolve($argv);
 		exit(0);
+	case "suse-blacklists-to-alt-commit":
+		cmd_suse_blacklists_to_alt_commit($argv);
+		exit(0);
 	}
 
 	Globals::$log->load($work_dir."/commits.log");

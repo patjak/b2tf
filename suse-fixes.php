@@ -232,6 +232,7 @@ function check_for_matches($p, $cache, $git)
 
 		if (strcmp($diff1, $diff2) == 0) {
 			green("Found exact duplicate for ".$p->commit_id." in ".$dup->commit_id);
+			return $dup;
 		} else {
 			msg($p->commit_id.": ".strlen($diff1));
 			msg($dup->commit_id.": ".strlen($diff2));
@@ -242,12 +243,12 @@ function check_for_matches($p, $cache, $git)
 			passthru("rm /tmp/2");
 
 			error("Found non-exact duplicate for ".$p->commit_id." in ".$dup->commit_id);
+
+			$ask = Util::ask("(A)ccept duplicate or (s)kip: ", array("a", "s"), "a");
+
+			if ($ask == "a")
+				return $dup;
 		}
-
-		$ask = Util::ask("(A)ccept duplicate or (s)kip: ", array("a", "s"), "a");
-
-		if ($ask == "a")
-			return $dup;
 	}
 
 	return FALSE;
@@ -361,7 +362,10 @@ function get_suse_patch_filename($suse_repo_path, $commit_id)
 	exec("cd ".$suse_repo_path."/patches.suse && ".
 	     "grep -Rl \"Alt-commit: ".$commit_id."\" | grep -v \"~\"", $res);
 
-	return $res[0];
+	if (isset($res[0]))
+		return $res[0];
+	else
+		return FALSE;
 }
 
 function suse_insert_file($file_src, $file_dst)
@@ -512,7 +516,7 @@ function get_kernel_version($suse_repo_path)
 
 function cmd_suse_fixes($argv)
 {
-	$opts = Globals::$options;
+	$opts = Options::$options;
 	$work_dir = Options::get("work-dir");
 	$suse_repo_path = Options::get("suse-repo-path");
 
@@ -826,6 +830,73 @@ function cmd_suse_fixes($argv)
 		msg("\nNothing got backported.");
 	else
 		green("\nBackport of ".$actually_backported." patches finished successfully");
+}
+
+function remove_blacklist_entry($commit_id)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$blacklist_file = file_get_contents($suse_repo_path."/blacklist.conf");
+
+	$blacklist = explode(PHP_EOL, $blacklist_file);
+	for ($i = 0; $i < count($blacklist); $i++) {
+		$b = trim($blacklist[$i]);
+		$b_id = explode(" ", $b)[0];
+		if ($b_id == $commit_id) {
+			unset($blacklist[$i]);
+			break;
+		}
+	}
+
+	$blacklist = implode(PHP_EOL, $blacklist);
+	file_put_contents($suse_repo_path."/blacklist.conf", $blacklist);
+}
+
+function cmd_suse_blacklists_to_alt_commit($argv)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$git = Globals::$git; 
+	$blacklist_file = file_get_contents($suse_repo_path."/blacklist.conf");
+
+	$blacklist = explode(PHP_EOL, $blacklist_file);
+
+	$num_skip = 0;
+	foreach ($blacklist as $line) {
+		$words = explode(" ", $line);
+
+		$id = $words[0];
+
+		// Search for lines with multiple commit ids
+		for ($i = 1; $i < count($words); $i++) {
+			$word = $words[$i];
+
+			$word = str_replace(":", "", $word);
+			if (strlen($word) == 40) {
+				// Check if it's an alt-commit
+				$filename = get_suse_patch_filename($suse_repo_path, $word);
+				if ($filename === FALSE) {
+					debug("SKIP: Filename not found for: ".$word);
+					$num_skip++;
+					continue;
+				}
+
+				$p = new Patch();
+				$p->parse_from_git($id);
+
+				$dup = check_for_alt_commits($p, $suse_repo_path, $git);
+				if ($dup === FALSE) {
+					debug("SKIP: ".$line);
+					$num_skip++;
+					continue;
+				}
+
+				msg($id." ".$word.": ".$filename);
+				insert_tags_in_patch($suse_repo_path."/patches.suse/".$filename, array("Alt-commit: ".$id));
+				remove_blacklist_entry($id);
+				passthru($suse_repo_path."/scripts/log");
+			}
+		}
+
+	}
 }
 
 ?>
