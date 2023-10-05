@@ -1135,6 +1135,48 @@ function cmd_apply($argv)
 
 function cmd_skip($argv)
 {
+	$work_dir = Options::get("work-dir");
+	$force = Options::get("force", FALSE);
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$branch = Options::get("branch");
+	$range_start = Options::get("range-start");
+
+	$git->change_branch();
+
+	$body = explode(PHP_EOL, $log->get_body());
+	$commit_id = $log->get_next_commit();
+
+	// Find row
+	for ($i = 0; $i < count($body); $i++) {
+		$line = $body[$i];
+		if (trim($line) == "")
+			continue;
+
+		$line = explode(" ", $line);
+		if ($line[0] == "#")
+			continue;
+
+		if ($line[0] == $commit_id) {
+			$body[$i] = "# SKIP ".$commit_id;
+			break;
+		}
+	}
+
+	if ($i == count($body))
+		fatal("Couldn't find upstream commit: ".$upstream_id);
+
+	$git->cmd("git cherry-pick --abort");
+
+	$body = implode(PHP_EOL, $body);
+	$log->set_body($body);
+	$log->save();
+
+	$p = new Patch();
+	$p->parse_from_git($commit_id);
+	msg("Skipped ".$commit_id." ".$p->subject);
 }
 
 function cmd_setup($argv)
@@ -2585,6 +2627,9 @@ function parse_options($argv)
 	case "apply":
 		cmd_apply($argv);
 		exit(0);
+	case "skip":
+		cmd_skip($argv);
+		exit(0);
 	case "add":
 		cmd_add($argv);
 		exit(0);
@@ -2696,6 +2741,8 @@ Commands:
   export - Runs git-format-patch over the specified range
 
   apply - Start re-applying the series
+
+  skip - Skip the current commit
 
   diff [files] - Show diff between current tree vs target tree
 
