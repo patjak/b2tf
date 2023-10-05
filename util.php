@@ -1,5 +1,14 @@
 <?php
 
+function msg($msg, $eol = TRUE) { echo $msg; if ($eol) { echo "\n"; } }
+function fatal($msg) { echo "\e[31m".$msg."\e[0m\n"; if (Globals::$debug) { debug_print_backtrace(); } exit(1); }
+function error($msg) { echo "\e[31m".$msg."\e[0m\n"; }
+function info($msg) { echo "\e[36m".$msg."\e[0m\n"; }
+function green($msg) { echo "\e[32m".$msg."\e[0m\n"; }
+function debug($msg) { if (Globals::$debug) { echo "\e[33m".$msg."\e[0m\n"; } }
+function debug_git($msg) { if (Globals::$debug_git) { echo "\e[33m".$msg."\e[0m\n"; } }
+function delimiter() { echo "\e[33m----------\e[0m\n"; }
+
 class Util {
 	public static function get_line($prompt) {
 		echo $prompt;
