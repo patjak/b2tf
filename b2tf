@@ -2023,8 +2023,18 @@ function insert_into_series_conf($filename)
 	return $code;
 }
 
+function suse_delete_patch($filename)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
 
-// This command replaces selected patches from the SUSE kernel with our exported backports
+	passthru("cd ".$suse_repo_path." && rm patches.suse/".$filename." && ".
+		 "sed -i '/patches.suse\/".$filename."/d' ./series.conf", $code);
+
+	if ($code != 0)
+		fatal("Failed to delete patch");
+}
+
+// This command replaces or deletes selected patches from the SUSE kernel with our exported backports
 function cmd_suse_replace($argv)
 {
 	$log = Globals::$log;
@@ -2163,6 +2173,11 @@ function cmd_suse_replace($argv)
 	$total = count($suse_deletions);
 	foreach ($suse_deletions as $suse_filename => $backport_filename ) {
 
+		if (!file_exists($suse_filename)) {
+			error("Patch no longer exists. Skipping: ".basename($suse_filename));
+			continue;
+		}
+
 		$p_suse = new Patch();
 		$p_suse->parse($suse_filename);
 
@@ -2239,11 +2254,16 @@ function cmd_suse_replace($argv)
 				} else {
 					$refresh = TRUE;
 					error("Sequencing patches failed. Fix it and refresh the problematic patch.");
-					$ask = Util::ask("(R)etry or (s)kip: ", array("r", "s"), "r");
+					$ask = Util::ask("(R)etry, (s)kip or (d)elete: ", array("r", "s", "d"), "r");
 
 					if ($ask == "s") {
 						exec("cd ".$suse_repo_path." && git restore patches.suse/".$suse_filename);
 						$skip = TRUE;
+					}
+
+					if ($ask == "d") {
+						suse_delete_patch($suse_filename);
+						$refresh = TRUE;
 					}
 				}
 			}
@@ -2252,17 +2272,15 @@ function cmd_suse_replace($argv)
 		if ($skip)
 			continue;
 
-		$msg = "Update patches.suse/".$suse_filename." (".$p_backport->references.")";
-		// $msg = Util::word_wrap($msg, 62);
-		$msg = wordwrap($msg, 62, "\n");
-
-		file_put_contents("/tmp/commit-msg", $msg);
-
 		if ($refresh) {
 			passthru("cd ".$suse_repo_path." && ./scripts/log", $code);
 			if ($code != 0)
 				fatal("Failed to run scripts/log on patch");
 		} else {
+			$msg = "Update patches.suse/".$suse_filename." (".$p_backport->references.")";
+			$msg = wordwrap($msg, 62, "\n");
+			file_put_contents("/tmp/commit-msg", $msg);
+
 			passthru("cd ".$suse_repo_path." && git add series.conf", $code);
 			passthru("cd ".$suse_repo_path." && git add patches.suse/".$suse_filename, $code);
 			passthru("cd ".$suse_repo_path." && git commit -F /tmp/commit-msg", $code);
@@ -2754,7 +2772,7 @@ Commands:
 
   suse-unblacklist - Remove all blacklist entries for patches we're backporting
 
-  suse-delete - Choose which of the already backported patches we keep or replace
+  suse-replace - Choose which of the already backported patches we keep or replace
 
   suse-apply - Finally apply the remaining patches to the SUSE tree
 
