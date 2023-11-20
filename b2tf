@@ -1595,6 +1595,102 @@ function cmd_status($argv)
 	echo "\n";
 }
 
+function diff_explode_files($diff)
+{
+	$files = array();
+	$file = array();
+
+	/* $diff is an array of lines */
+	for ($i = 0; $i < count($diff); $i++) {
+		$line = $diff[$i];
+
+		// Find the start of the chunk and store previous chunk
+		$str = "diff --git ";
+		if (strncmp($line, $str, strlen($str)) == 0) {
+			if (count($file) > 0)
+				$files[] = $file;
+
+			$file = array();
+		}
+		$file[] = $line;
+	}
+
+	if (count($file) > 0)
+		$files[] = $file;
+
+	return $files;
+}
+
+// First entry is always the diff header
+function diff_explode_chunks($file)
+{
+	$chunks = array();
+	$chunk = "";
+
+	for ($i = 0; $i < count($file); $i++) {
+		$line = $file[$i];
+
+		// Search for start of new chunk
+		$str = "@@ ";
+		if (strncmp($line, $str, strlen($str)) == 0) {
+			// Only store chunk if not empty
+			if (strlen($chunk) > 0)
+				$chunks[] = $chunk;
+
+			$chunk = "";
+		}
+		$chunk .= $line.PHP_EOL;
+	}
+
+	if (strlen($chunk) > 0)
+		$chunks[] = $chunk;
+
+	return $chunks;
+}
+
+// Subtracts any chunks from chunks1 that exists in both files
+function diff_subtract_chunks($chunks1, $chunks2)
+{
+	$unique_chunks = $chunks1;
+
+	$filename1 = Util::parse_before(PHP_EOL, $chunks1[0]);
+	$filename2 = Util::parse_before(PHP_EOL, $chunks2[0]);
+
+	// Compare the filenames
+	if ($filename1 != $filename2)
+		return array();
+
+	// Start at index 1 since first entry is always the diff header
+	for ($i = 1; $i < count($chunks1); $i++) {
+		for ($j = 1; $j < count($chunks2); $j++) {
+			$chunk1 = $chunks1[$i];
+			$chunk2 = $chunks2[$j];
+
+			// We don't match on the line numbers so remove them
+			$chunk1 = Util::parse_after(" @@ ", $chunk1);
+			$chunk2 = Util::parse_after(" @@ ", $chunk2);
+
+			if (strcmp($chunk1, $chunk2) == 0) {
+				unset($unique_chunks[$i]);
+				break;
+			}
+		}
+	}
+
+	return array_values($unique_chunks);
+}
+
+function diff_print_chunks($chunks)
+{
+	if (count($chunks) <= 1)
+		return;
+
+	foreach ($chunks as $chunk) {
+		msg($chunk.PHP_EOL);
+		// delimiter();
+	}
+}
+
 function cmd_diff($argv)
 {
 	$work_dir = Options::get("work-dir");
@@ -1632,6 +1728,73 @@ function cmd_diff($argv)
 		fatal("Failed to diff");
 
 	echo array_to_str($res);
+}
+
+function cmd_diffdiff($argv)
+{
+	$work_dir = Options::get("work-dir");
+
+	$git = Globals::$git;
+
+	$branch = Options::get("branch");
+	if ($branch == "")
+		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
+
+	$range_start = Options::get("range-start");
+	$range_stop = Options::get("range-stop");
+	$branch_point = Options::get("branch-point");
+	$paths = Options::get("paths");
+
+	$git->change_branch();
+
+	// If a list of files/paths are provided we use that instead of the normal paths
+	if (isset($argv[2])) {
+		$args = $argv;
+		array_shift($args);
+		array_shift($args);
+
+		$paths = implode(" ", $args);
+	}
+
+	$git->cmd("git diff ".$branch_point." ".$range_start." -- ".$paths, $res, $status);
+	if ($status != 0)
+		fatal("Failed to diff");
+
+	$diff_base = $res;
+
+	unset($res);
+	$git->cmd("git diff ".$branch." ".$range_stop." -- ".$paths, $res, $status);
+	if ($status != 0)
+		fatal("Failed to diff");
+
+	$diff_end = $res;
+
+	$base_files = diff_explode_files($diff_base);
+	$end_files = diff_explode_files($diff_end);
+
+	$result_chunks = array();
+	foreach ($end_files as $end_file) {
+		$found = FALSE;
+		$end_chunks = diff_explode_chunks($end_file);
+
+		foreach ($base_files as $base_file) {
+			$base_chunks = diff_explode_chunks($base_file);
+			$unique_chunks = diff_subtract_chunks($end_chunks, $base_chunks);
+
+			if (count($unique_chunks) > 0) {
+				$found = TRUE;
+				if (count($unique_chunks) > 1)
+					$result_chunks[] = $unique_chunks;
+
+				break;
+			}
+		}
+		if (!$found)
+			$result_chunks[] = $end_chunks;
+	}
+
+	foreach ($result_chunks as $chunks)
+		diff_print_chunks($chunks);
 }
 
 function cmd_log($argv)
@@ -2666,6 +2829,9 @@ function parse_options($argv)
 	case "diff":
 		cmd_diff($argv);
 		exit(0);
+	case "diffdiff":
+		cmd_diffdiff($argv);
+		exit(0);
 	case "rebase":
 		cmd_rebase($argv);
 		exit(0);
@@ -2763,6 +2929,8 @@ Commands:
   skip - Skip the current commit
 
   diff [files] - Show diff between current tree vs target tree
+
+  diffdiff [files] - Try to show diff with only changes from the backport range
 
   status - Show current status of backport and git repo
 
