@@ -532,7 +532,7 @@ function cmd_suse_fixes($argv)
 	$skip_review = Options::get("skip-review", FALSE);
 
 	// Skip all patches that doesn't immediately applies
-	$skip_fails = Options::get("skip-fails");
+	$skip_fails = Options::get("skip-fails", FALSE);
 
 	// Ignore everything that is not alt-commits
 	$only_alt_commits = Options::get("only-alt-commits", FALSE);
@@ -540,6 +540,7 @@ function cmd_suse_fixes($argv)
 		msg("Only backporting Alt-commits");
 
 	$repo_tag = Options::get("repo-tag", FALSE);
+	$refs = Options::get("refs", FALSE);
 
 	$signature = Options::get("signature");
 
@@ -703,9 +704,19 @@ function cmd_suse_fixes($argv)
 					$suse_patch_file = get_suse_patch_filename($suse_repo_path, $dup->commit_id);
 					insert_tags_in_patch($suse_repo_path."/patches.suse/".$suse_patch_file, array("Alt-commit: ".$p->commit_id));
 
-					msg("The patch is an Alt-commit");
-					Util::pause();
-					passthru("cd ".$suse_repo_path." && ./scripts/log", $status);
+					$references = $refs === FALSE ? "" : "(".$refs.")";
+					$msg = "Refresh patches.suse/".$suse_patch_file." ".$references."\n\nAlt-commit";
+					$msg = wordwrap($msg, 62, "\n");
+					file_put_contents("/tmp/commit-msg", $msg);
+
+					passthru("cd ".$suse_repo_path." && ".
+						 "git add series.conf && ".
+						 "git add patches.suse/".$suse_patch_file." && ".
+						 "git commit -F /tmp/commit-msg", $code);
+
+					if ($code != 0)
+						fatal("Failed to commit alt-commit");
+
 					$actually_backported++;
 					continue;
 				}
