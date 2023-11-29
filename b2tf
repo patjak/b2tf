@@ -377,12 +377,13 @@ class Log {
 
 	/**
 	 * Set backport commit id for specified upstream commit id
+	 * and add the subject if it's missing and provided as an arg.
 	 *
 	 * @param $upstream_id Upstream commit id
 	 * @param $backport_id Backported commit id
 	 * @return FALSE on failure
 	 */
-	public function update_commit($upstream_id, $backport_id) {
+	public function update_commit($upstream_id, $backport_id, $subject = "") {
 		if ($this->filename === FALSE)
 			return FALSE;
 
@@ -399,7 +400,15 @@ class Log {
 				continue;
 	
 			if ($line[0] == $upstream_id) {
-				$body[$i] = $upstream_id." ".$backport_id;
+				// Check if subject exists
+				if ($subject !== "") {
+					$prev_line = trim($body[$i - 1]);
+					if (strpos($prev_line, "# ") !== 0)
+						$subject = PHP_EOL."# ".$subject.PHP_EOL;
+					else
+						$subject = "";
+				}
+				$body[$i] = $subject.$upstream_id." ".$backport_id;
 				break;
 			}
 		}
@@ -1126,7 +1135,7 @@ function cmd_apply($argv)
 			$log->update_commit($p->commit_id, "empty");
 			continue;
 		}
-		$log->update_commit($p->commit_id, $new_id);
+		$log->update_commit($p->commit_id, $new_id, $p->subject);
 		green("Applied (".($i + 1)."/".$num_commits.") ".$p->commit_id." ".$p->subject);
 	}
 
