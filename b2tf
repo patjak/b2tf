@@ -1891,6 +1891,44 @@ function insert_tags_in_patch($filename, $tags, $signature = "")
 
 }
 
+// Update the contents of an existing tag. Tag name is not case sensitive
+// If the tag doesn't exist, nothing gets updated
+function update_tag_in_patch($filename, $tag, $value)
+{
+	$data = file_get_contents($filename);
+	if ($data === FALSE)
+		fatal("Failed to open patch file for tag update");
+
+	debug("Updating tag: ".$tag." to ".$value);
+
+	$lines = explode(PHP_EOL, $data);
+
+	$found = FALSE;
+	for ($i = 0; $i < count($lines); $i++) {
+		$line = $lines[$i];
+		if ($line == "---")
+			break;
+
+		$cols = explode(":", $line);
+
+		if (count($cols) != 2)
+			continue;
+
+		if (strtolower(trim($cols[0])) == strtolower($tag)) {
+			if ($found === TRUE)
+				fatal("Multiple tags found when trying to update tag: ".$tag.". I don't know how to process this!");
+
+			$lines[$i] = $cols[0].": ".$value;
+			$found = TRUE;
+		}
+	}
+
+	$data = implode(PHP_EOL, $lines);
+
+	if (file_put_contents($filename, $data) === FALSE)
+		fatal("Failed to write to patch file: ".$filename);
+}
+
 function suse_format_patch($p1, $p2, $signature, $refs)
 {
 	$git = Globals::$git;
@@ -2371,14 +2409,21 @@ function cmd_suse_replace($argv)
 		$git_tag_suse = $p_suse->parse_for_tag("Git-commit: ");
 		$git_tag_backport = $p_backport->parse_for_tag("Git-commit: ");
 
+		// We append the old references to the new patch
+		$new_references = trim($p_backport->parse_for_tag("References: "));
+		$old_references = trim($p_suse->parse_for_tag("References: "));
+
+		// git-fixes is a special case were we simply remove the tag
+		if ($old_references == "git-fixes")
+			$old_references = "";
+
+		update_tag_in_patch($work_dir."/patches.suse/".$backport_filename, "References", trim($new_references." ".$old_references));
+
 		// Now we can replace the file
 		exec("cp ".$work_dir."/patches.suse/".$backport_filename." ".$suse_repo_path."/patches.suse/".$suse_filename);
 
 		if ($git_tag_suse === FALSE || $git_tag_backport === FALSE)
 			fatal("SUSE patch or backported patch is missing the Git-commit tag");
-
-		/*
-		*/
 
 		// Sometimes we replace a commit with a cherry-pick (or the otherway around) so series.conf needs adjustment
 		if ($git_tag_suse != $git_tag_backport) {
