@@ -569,6 +569,15 @@ function cmd_suse_fixes($argv)
 			fatal("Failed to create and checkout branch: ".$branch_name);
 	}
 
+	$patches = array();
+	$hash = Options::get("hash");
+	$hash = explode(" ", $hash);
+	foreach ($hash as $h) {
+		trim($h);
+		if ($h != "")
+			$patches[] = $h;
+	}
+
 	// Find the kernel version in the suse kernel-source repo
 	$kernel_version = get_kernel_version($suse_repo_path);
 	msg("SUSE repo kernel version: ".$kernel_version);
@@ -579,8 +588,8 @@ function cmd_suse_fixes($argv)
 		$patches = load_fixes_file($fixes_file, $work_dir, $git);
 	} else if ($fixes_url !== FALSE) {
 		$patches = parse_cvs_url($fixes_url, $git);
-	} else {
-		msg("No fixes file specified.");
+	} else if (count($patches) == 0) {
+		msg("No commits specified.");
 		$hashes = Util::get_line("Enter hashes manually (separated by spaces): ");
 		$hashes = explode(" ", $hashes);
 

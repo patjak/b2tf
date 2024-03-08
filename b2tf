@@ -1753,6 +1753,9 @@ function cmd_diffdiff($argv)
 	$range_stop = Options::get("range-stop");
 	$branch_point = Options::get("branch-point");
 	$paths = Options::get("paths");
+	$exclude = Options::get("exclude", FALSE);
+
+	$exclude = $exclude !== FALSE ? explode(" ", $exclude) : array();
 
 	$git->change_branch();
 
@@ -1785,6 +1788,11 @@ function cmd_diffdiff($argv)
 	foreach ($end_files as $end_file) {
 		$found = FALSE;
 		$end_chunks = diff_explode_chunks($end_file);
+
+		// Skip this file if user excluded it
+		$filename = substr(explode(" ", $end_file[0])[2], 2);
+		if (in_array($filename, $exclude))
+			continue;
 
 		foreach ($base_files as $base_file) {
 			$base_chunks = diff_explode_chunks($base_file);
@@ -2927,6 +2935,7 @@ $opts = array(
 	"refs:",
 	"release:",
 	"repo-tag:",
+	"hash:",
 	"fix",
 	"force",
 	"fixes-file:",
@@ -2934,6 +2943,7 @@ $opts = array(
 	"file-type:",
 	"suse-repo-path:",
 	"only-alt-commits",
+	"exclude:",
 	"debug",
 	"debug-git",
 	);
@@ -2985,6 +2995,7 @@ Commands:
   diff [files] - Show diff between current tree vs target tree
 
   diffdiff [files] - Try to show diff with only changes from the backport range
+    --exclude=<files>	- Files to exclude from the diff
 
   status - Show current status of backport and git repo
 
@@ -2999,6 +3010,7 @@ Commands:
   suse-apply - Finally apply the remaining patches to the SUSE tree
 
   suse-fixes - Automate backport of git-fixes to the SUSE repo
+    --hash		- A list of hashes separated with spaces
     --only-alt-commits	- Skip everything except Alt-commits
     --fixes-file	- provide a file containing commits
     --
