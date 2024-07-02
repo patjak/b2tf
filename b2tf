@@ -3012,7 +3012,11 @@ Commands:
     --hash		- A list of hashes separated with spaces
     --only-alt-commits	- Skip everything except Alt-commits
     --fixes-file	- provide a file containing commits
-    --
+    --fixes-url		- provide URL containing fixes
+    --skip-review	- Assume all patches need to be backported
+    --skip-fails	- Skip patches that doesn't apply cleanly
+
+  suse-blacklists-to-alt-commit - Convert all blacklisted duplicates to alt-commits
 
   <ALL>
     --refs		- Provide contents of the reference tag
