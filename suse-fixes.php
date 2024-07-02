@@ -573,7 +573,7 @@ function cmd_suse_fixes($argv)
 	}
 
 	$patches = array();
-	$hash = Options::get("hash");
+	$hash = Options::get("hash", FALSE);
 	$hash = explode(" ", $hash);
 	foreach ($hash as $h) {
 		trim($h);
