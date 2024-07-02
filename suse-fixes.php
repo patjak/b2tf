@@ -110,14 +110,17 @@ function parse_fixes_simple($lines, $git)
 	foreach ($lines as $line) {
 		$hashes = explode(" ", $line);
 		foreach ($hashes as $hash) {
-			// Check if hash is valid
+			if ($hash == "")
+				continue;
+
+			// Check if hash is valid and get the full sha
 			$res = NULL;
-			$git->cmd("git log --oneline -n1 ".$hash, $res, $status);
+			$git->cmd("git rev-parse ".$hash, $res, $status);
 
 			if ($status != 0)
-				fatal("Unknown hash: ".$hash);
+				debug("Unknown hash: ".$hash);
 			else
-				$patches[] = $hash;
+				$patches[] = trim($res[0]);
 		}
 	}
 
