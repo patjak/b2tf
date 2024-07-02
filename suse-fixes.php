@@ -715,7 +715,6 @@ function cmd_suse_fixes($argv)
 
 					$references = $refs === FALSE ? "" : "(".$refs.")";
 					$msg = "Refresh patches.suse/".$suse_patch_file." ".$references."\n\nAlt-commit";
-					$msg = wordwrap($msg, 62, "\n");
 					file_put_contents("/tmp/commit-msg", $msg);
 
 					passthru("cd ".$suse_repo_path." && ".

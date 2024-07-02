@@ -2503,7 +2503,6 @@ function cmd_suse_replace($argv)
 				fatal("Failed to run scripts/log on patch");
 		} else {
 			$msg = "Update patches.suse/".$suse_filename." (".$p_backport->references.")";
-			$msg = wordwrap($msg, 62, "\n");
 			file_put_contents("/tmp/commit-msg", $msg);
 
 			passthru("cd ".$suse_repo_path." && git add series.conf", $code);
