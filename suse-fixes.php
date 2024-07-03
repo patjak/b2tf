@@ -469,6 +469,12 @@ function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
 			$reason = Util::get_line("Reason: ");
 	}
 
+	if (isset(Options::$options['refs'])) {
+		$refs = Options::get("refs");
+		if ($refs != "git-fixes")
+			$reason = $refs.": ";
+	}
+
 	exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$suse_repo_path."/blacklist.conf");
 	msg("Blacklisting: ".$p->commit_id." # ".$reason);
 
