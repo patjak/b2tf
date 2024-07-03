@@ -818,7 +818,7 @@ function cmd_suse_fixes($argv)
 
 		while ($res != 0) {
 			error("Failed to sequence the patch");
-			$ask = Util::ask("(R)etry, (s)kip, (b)lacklist, (v)iew again or (a)bort: ", array("r", "s", "b", "v", "a"), "r");
+			$ask = Util::ask("(R)etry, (s)kip, (b)lacklist, (v)iew patch or (a)bort: ", array("r", "s", "b", "v", "a"), "r");
 
 			if ($ask == "v") {
 				view_commit($hash, $git);
