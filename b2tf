@@ -1964,17 +1964,17 @@ function get_suse_backports($suse_repo_path)
 		$line = explode(" ", $line);
 		$commit_id = $line[1];
 		if (strlen($commit_id) != 40)
-			$commit_id = $line[2];
+			$commit_id = isset($line[2]) ? $line[2] : "";
 
 		if (strlen($commit_id) != 40) {
-			error("\nFound invalid backport commit id: ".var_dump($line));
+			debug("\nFound invalid backport commit id: ".implode(" ", $line));
 			continue;
 		}
 
 		$commits[] = $commit_id;
 	}
 
-	msg("\nFound ".count($commits)." suse backports");
+	debug("\nFound ".count($commits)." suse backports");
 
 	return $commits;
 }
