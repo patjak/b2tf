@@ -639,8 +639,6 @@ function cmd_suse_fixes($argv)
 
 	$actually_backported = 0;
 
-	msg("Found ".count($patches)." patches");
-
 	$i = 0;
 	foreach ($patches as $hash) {
 		$i++;
