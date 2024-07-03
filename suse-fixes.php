@@ -939,4 +939,180 @@ function cmd_suse_blacklists_to_alt_commit($argv)
 	}
 }
 
+function cve_backport_branch($branch, $hash, $refs)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+
+	// First make sure the main branch is updated
+	passthru($pre."git checkout ".$branch, $code);
+	if ($code != 0)
+		fatal("Failed to checkout branch: ".$branch);
+
+	passthru($pre."git pull", $code);
+	if ($code != 0)
+		fatal("Failed to checkout branch: ".$branch);
+
+	// Create branch if it doesn't exist
+	exec($pre."git rev-parse --verify ".$branch."-cves", $output, $code);
+	if ($code == 128)
+		exec($pre."git branch ".$branch."-cves");
+
+	// Check if -cves branch is behind
+	unset($output);
+	exec($pre."git rev-list --left-right --count ".$branch."-cves..".$branch, $output, $code);
+	if ($code != 0)
+		fatal("Failed to check if CVE branch is behind");
+
+	passthru($pre."git checkout ".$branch."-cves", $code);
+	if ($code != 0)
+		fatal("Failed to switch to branch ".$branch."-cves");
+
+
+	$num_behind = trim(explode("\t", $output[0])[1]);
+	if ($num_behind > 0) {
+		msg("Your cve branch is ".$num_behind." patches behind. Doing git pull --rebase");
+
+		passthru($pre."git pull --rebase . ".$branch, $code);
+		if ($code != 0) {
+			info("\nMake sure the rebase completed successfully before continuing!");
+			Util::pause();
+		}
+	}
+
+	// Check again if -cves branch is behind
+	unset($output);
+	exec($pre."git rev-list --left-right --count ".$branch."-cves..".$branch, $output, $code);
+	if ($code != 0)
+		fatal("Failed to check if CVE branch is behind");
+
+	$num_behind = trim(explode("\t", $output[0])[1]);
+	if ($num_behind > 0)
+		fatal("Your CVE branch is behind even though you're supposed to have rebased it.");
+
+	// Check if -cves branch is ahead
+	unset($output);
+	exec($pre."git rev-list --left-right --count ".$branch."..".$branch."-cves", $output, $code);
+	if ($code != 0)
+		fatal("Failed to check if CVE branch is ahead");
+
+	$num_ahead = trim(explode("\t", $output[0])[1]);
+
+	msg("Your CVE branch is ".$num_ahead." patches ahead of ".$branch);
+
+	passthru("b2tf suse-fixes --skip-review --refs=\"".$refs."\" --hash ".$hash.
+		 " --branch ".$branch."-cves", $code);
+}
+
+function check_if_commit_is_handled($branch, $hash, &$status)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+
+	unset($output);
+	exec($pre."git checkout ".$branch." 2> /dev/null", $output, $code);
+	if ($code != 0)
+		return FALSE;
+
+	$backports = get_suse_backports($suse_repo_path);
+	$blacklists = get_suse_blacklists($suse_repo_path);
+
+	$status = "";
+	if (in_array($hash, $backports)) {
+		$status = " (done)";
+		return TRUE;
+	}
+
+	if (in_array($hash, $blacklists)) {
+		$status = " (blacklisted)";
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+function cmd_suse_cve($argv)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+	$cve = Options::get("cve");
+	$git = Globals::$git;
+
+	unset($output);
+	exec($pre."./scripts/cve_tools/cve2metadata.sh ".$cve, $output, $code);
+
+	$metadata = explode(" ", $output[0]);
+	$hash = array_shift($metadata);
+	$score = array_shift($metadata);
+	$score = explode(":", $score)[1];
+	$refs = implode(" ", $metadata);
+
+	$patch = new Patch();
+	$patch->parse_from_git($hash);
+	if ($patch === FALSE)
+		fatal("Failed to find commit in upstream repo (".$git->dir.")");
+
+	msg("Commit:\t\t".$hash);
+	msg("Subject:\t".$patch->subject);
+	if ($score >= 7)
+		error("Score:\t\t".$score);
+	else
+		msg("Score:\t\t".$score);
+	msg("References:\t".$refs);
+
+	$bsc_id = explode("bsc#", $refs);
+	if (isset($bsc_id[1])) {
+		$bsc_id = explode(" ", $bsc_id[1])[0];
+		msg("Link:\t\thttps://bugzilla.suse.com/show_bug.cgi?id=".$bsc_id);
+	}
+
+	unset($output);
+	exec($pre."./scripts/check-kernel-fix ".$cve, $output, $code);
+
+	if ($code != 0)
+		fatal("Failed to run check-kernel-fix scripts");
+
+	$output = implode(PHP_EOL, $output);
+	$output = explode("ACTION NEEDED!\n", $output);
+	$actions = explode(PHP_EOL, $output[1]);
+
+	$hashes = array();
+	$branches = array();
+	foreach ($actions as $a) {
+		$branch = explode(": ", $a)[0];
+		$hash = explode("MANUAL: ", $a)[1];
+		foreach (explode(" ", $hash) as $str) {
+			if (strlen($str) == 40) {
+				$hash = $str;
+				break;
+			}
+		}
+		if (strlen($hash) != 40)
+			fatal("Couldn't find commit id for branch ".$branch);
+
+		$hashes[$branch] = $hash;
+		$branches[] = $branch;
+	}
+	$branches[] = "Quit";
+
+	msg("\nPossibly affected branches:");
+
+	do {
+		$i = 1;
+		foreach ($branches as $branch) {
+			$status = "";
+			if ($branch != "Quit") {
+				check_if_commit_is_handled($branch."-cves", $hashes[$branch], $status);
+			}
+
+			msg($i++.") ".str_pad($branch, 20, " ").$status);
+		}
+
+		$branch = Util::ask_from_array($branches, "Select branch for backporting: ", FALSE);
+		if ($branch != "Quit")
+			cve_backport_branch($branch, $hashes[$branch], $refs);
+	} while ($branch != "Quit");
+
+}
+
 ?>

@@ -2853,6 +2853,9 @@ function parse_options($argv)
 	case "suse-blacklists-to-alt-commit":
 		cmd_suse_blacklists_to_alt_commit($argv);
 		exit(0);
+	case "suse-cve":
+		cmd_suse_cve($argv);
+		exit(0);
 	}
 
 	Globals::$log->load($work_dir."/commits.log");
@@ -2943,6 +2946,7 @@ $opts = array(
 	"suse-repo-path:",
 	"only-alt-commits",
 	"exclude:",
+	"cve:",
 	"debug",
 	"debug-git",
 	);
@@ -3017,6 +3021,8 @@ Commands:
     --skip-fails	- Skip patches that doesn't apply cleanly
 
   suse-blacklists-to-alt-commit - Convert all blacklisted duplicates to alt-commits
+
+  suse-cve - Automate backport of CVE fixes to all affected SUSE branches
 
   <ALL>
     --refs		- Provide contents of the reference tag
