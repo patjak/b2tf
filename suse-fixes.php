@@ -545,6 +545,7 @@ function cmd_suse_fixes($argv)
 	$fixes_file = Options::get("fixes-file", FALSE);
 	$fixes_url = Options::get("fixes-url", FALSE);
 	$skip_review = Options::get("skip-review", FALSE);
+	$branch = Options::get("branch", FALSE);
 
 	// Skip all patches that doesn't immediately applies
 	$skip_fails = Options::get("skip-fails", FALSE);
@@ -570,18 +571,25 @@ function cmd_suse_fixes($argv)
 	if ($res != 0)
 		fatal("Couldn't get current branch from ".$suse_repo_path);
 
-	$original_branch = $out[0];
-	$line = Util::get_line("Enter name for new branch (leave empty to stay on ".$original_branch."): ");
-	$line = trim(strtolower($line));
-	if ($line == "") {
-		msg("Continuing on current branch");
-		$branch_name = $original_branch;
-	} else {
-		$branch_name = $original_branch."-".$line;
+	if ($branch === FALSE) {
+		$original_branch = $out[0];
+		$line = Util::get_line("Enter name for new branch (leave empty to stay on ".$original_branch."): ");
+		$line = trim(strtolower($line));
+		if ($line == "") {
+			$branch_name = $original_branch;
+		} else {
+			$branch_name = $original_branch."-".$line;
 
-		exec("cd ".$suse_repo_path." && git checkout -b ".$branch_name, $out, $res);
+			exec("cd ".$suse_repo_path." && git checkout -b ".$branch_name, $out, $res);
+			if ($res != 0)
+				fatal("Failed to create and checkout branch: ".$branch_name);
+		}
+	} else {
+		// If a branch is specified, we assume it has already been created by user
+		$branch_name = $branch;
+		exec("cd ".$suse_repo_path." && git checkout ".$branch_name, $out, $res);
 		if ($res != 0)
-			fatal("Failed to create and checkout branch: ".$branch_name);
+			fatal("Failed to checkout branch: ".$branch_name);
 	}
 
 	$patches = array();
