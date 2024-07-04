@@ -1039,31 +1039,37 @@ function cmd_suse_cve($argv)
 	$git = Globals::$git;
 
 	unset($output);
-	exec($pre."./scripts/cve_tools/cve2metadata.sh ".$cve, $output, $code);
+	exec($pre."./scripts/cve_tools/cve2metadata.sh ".$cve." 2>&1", $output, $code);
 
-	$metadata = explode(" ", $output[0]);
-	$hash = array_shift($metadata);
-	$score = array_shift($metadata);
-	$score = explode(":", $score)[1];
-	$refs = implode(" ", $metadata);
+	// Sometimes cve2metadata fails so make sure we check that
+	if (strpos($output[0], "cannot be resolved to a CVE") === FALSE) {
+		$metadata = explode(" ", $output[0]);
+		$hash = array_shift($metadata);
+		$score = array_shift($metadata);
+		$score = explode(":", $score)[1];
+		$refs = implode(" ", $metadata);
 
-	$patch = new Patch();
-	$patch->parse_from_git($hash);
-	if ($patch === FALSE)
-		fatal("Failed to find commit in upstream repo (".$git->dir.")");
+		$patch = new Patch();
+		$patch->parse_from_git($hash);
+		if ($patch === FALSE)
+			fatal("Failed to find commit in upstream repo (".$git->dir.")");
 
-	msg("Commit:\t\t".$hash);
-	msg("Subject:\t".$patch->subject);
-	if ($score >= 7)
-		error("Score:\t\t".$score);
-	else
-		msg("Score:\t\t".$score);
-	msg("References:\t".$refs);
+		msg("Commit:\t\t".$hash);
+		msg("Subject:\t".$patch->subject);
+		if ($score >= 7)
+			error("Score:\t\t".$score);
+		else
+			msg("Score:\t\t".$score);
+		msg("References:\t".$refs);
 
-	$bsc_id = explode("bsc#", $refs);
-	if (isset($bsc_id[1])) {
-		$bsc_id = explode(" ", $bsc_id[1])[0];
-		msg("Link:\t\thttps://bugzilla.suse.com/show_bug.cgi?id=".$bsc_id);
+		$bsc_id = explode("bsc#", $refs);
+		if (isset($bsc_id[1])) {
+			$bsc_id = explode(" ", $bsc_id[1])[0];
+			msg("Link:\t\thttps://bugzilla.suse.com/show_bug.cgi?id=".$bsc_id);
+		}
+	} else {
+		fatal("cve2metadata failed to find the CVE");
+		$refs = FALSE;
 	}
 
 	unset($output);
