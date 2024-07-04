@@ -941,67 +941,17 @@ function cmd_suse_blacklists_to_alt_commit($argv)
 
 function cve_backport_branch($branch, $hash, $refs)
 {
-	$suse_repo_path = Options::get("suse-repo-path");
-	$pre = "cd ".$suse_repo_path." && ";
+	rebase_cve_branch($branch);
+	// kernel-source repo is checked out in $branch-cves after above rebase
 
-	// First make sure the main branch is updated
-	passthru($pre."git checkout ".$branch, $code);
-	if ($code != 0)
-		fatal("Failed to checkout branch: ".$branch);
-
-	passthru($pre."git pull", $code);
-	if ($code != 0)
-		fatal("Failed to checkout branch: ".$branch);
-
-	// Create branch if it doesn't exist
-	exec($pre."git rev-parse --verify ".$branch."-cves", $output, $code);
-	if ($code == 128)
-		exec($pre."git branch ".$branch."-cves");
-
-	// Check if -cves branch is behind
-	unset($output);
-	exec($pre."git rev-list --left-right --count ".$branch."-cves..".$branch, $output, $code);
-	if ($code != 0)
-		fatal("Failed to check if CVE branch is behind");
-
-	passthru($pre."git checkout ".$branch."-cves", $code);
-	if ($code != 0)
-		fatal("Failed to switch to branch ".$branch."-cves");
-
-
-	$num_behind = trim(explode("\t", $output[0])[1]);
-	if ($num_behind > 0) {
-		msg("Your cve branch is ".$num_behind." patches behind. Doing git pull --rebase");
-
-		passthru($pre."git pull --rebase . ".$branch, $code);
-		if ($code != 0) {
-			info("\nMake sure the rebase completed successfully before continuing!");
-			Util::pause();
-		}
-	}
-
-	// Check again if -cves branch is behind
-	unset($output);
-	exec($pre."git rev-list --left-right --count ".$branch."-cves..".$branch, $output, $code);
-	if ($code != 0)
-		fatal("Failed to check if CVE branch is behind");
-
-	$num_behind = trim(explode("\t", $output[0])[1]);
+	$num_behind = check_if_cve_is_behind($branch);
 	if ($num_behind > 0)
-		fatal("Your CVE branch is behind even though you're supposed to have rebased it.");
+		fatal("Your cve branch is ".$num_behind." patches behind. Rebase must have failed");
 
-	// Check if -cves branch is ahead
-	unset($output);
-	exec($pre."git rev-list --left-right --count ".$branch."..".$branch."-cves", $output, $code);
-	if ($code != 0)
-		fatal("Failed to check if CVE branch is ahead");
-
-	$num_ahead = trim(explode("\t", $output[0])[1]);
-
+	$num_ahead = check_if_cve_is_ahead($branch);
 	msg("Your CVE branch is ".$num_ahead." patches ahead of ".$branch);
 
-	passthru("b2tf suse-fixes --refs=\"".$refs."\" --hash ".$hash.
-		 " --branch ".$branch."-cves", $code);
+	passthru("b2tf suse-fixes --refs=\"".$refs."\" --hash ".$hash." --branch ".$branch."-cves", $code);
 }
 
 function check_if_commit_is_handled($branch, $hash, &$status)
@@ -1029,6 +979,62 @@ function check_if_commit_is_handled($branch, $hash, &$status)
 	}
 
 	return FALSE;
+}
+
+// Makes sure the branch is updated and it's -cves counterpart is rebased on top of it
+function rebase_cve_branch($branch)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+
+	// Update the branch
+	passthru($pre."git fetch origin ".$branch.":".$branch, $code);
+
+	// Create cve branch if it doesn't exist
+	exec($pre."git rev-parse --verify ".$branch."-cves", $output, $code);
+	if ($code == 128)
+		exec($pre."git branch ".$branch."-cves ".$branch);
+
+	unset($output);
+	exec($pre."git checkout ".$branch."-cves", $output, $code);
+	if ($code != 0)
+		fatal("Failed to checkout branch ".$branch."-cves");
+
+	passthru($pre."git pull --rebase . ".$branch, $code);
+	if ($code != 0) {
+		info("\nMake sure the rebase completed successfully before continuing!");
+		Util::pause();
+	}
+}
+
+function check_if_cve_is_behind($branch)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+
+	unset($output);
+	exec($pre."git rev-list --left-right --count ".$branch."-cves..".$branch, $output, $code);
+	if ($code != 0)
+		fatal("Failed to check if CVE branch is behind");
+
+	$num_behind = trim(explode("\t", $output[0])[1]);
+	return $num_behind;
+}
+
+function check_if_cve_is_ahead($branch)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+
+	// Check if -cves branch is ahead
+	unset($output);
+	exec($pre."git rev-list --left-right --count ".$branch."..".$branch."-cves", $output, $code);
+	if ($code != 0)
+		fatal("Failed to check if CVE branch is ahead");
+
+	$num_ahead = trim(explode("\t", $output[0])[1]);
+
+	return $num_ahead;
 }
 
 function cmd_suse_cve($argv)
