@@ -1000,7 +1000,7 @@ function cve_backport_branch($branch, $hash, $refs)
 
 	msg("Your CVE branch is ".$num_ahead." patches ahead of ".$branch);
 
-	passthru("b2tf suse-fixes --skip-review --refs=\"".$refs."\" --hash ".$hash.
+	passthru("b2tf suse-fixes --refs=\"".$refs."\" --hash ".$hash.
 		 " --branch ".$branch."-cves", $code);
 }
 
