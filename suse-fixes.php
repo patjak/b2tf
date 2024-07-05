@@ -989,11 +989,17 @@ function rebase_cve_branch($branch)
 
 	// Update the branch
 	passthru($pre."git fetch origin ".$branch.":".$branch, $code);
+	if ($code != 0)
+		fatal("Failed to fetch branch ".$branch);
 
 	// Create cve branch if it doesn't exist
 	exec($pre."git rev-parse --verify ".$branch."-cves", $output, $code);
 	if ($code == 128)
 		exec($pre."git branch ".$branch."-cves ".$branch);
+
+	// If cve branch is not behind, do nothing
+	if (check_if_cve_is_behind($branch) == 0)
+		return;
 
 	unset($output);
 	exec($pre."git checkout ".$branch."-cves", $output, $code);
