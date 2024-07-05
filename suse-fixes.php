@@ -1043,6 +1043,40 @@ function check_if_cve_is_ahead($branch)
 	return $num_ahead;
 }
 
+function cmd_suse_cve_update($argv)
+{
+	$suse_repo_path = Options::get("suse-repo-path");
+	$pre = "cd ".$suse_repo_path." && ";
+
+	// Find all -cves branches
+	unset($output);
+	exec($pre."git branch | grep \"\\-cves\"", $output, $code);
+	if ($code != 0)
+		fatal("Failed to search for -cves branches");
+
+	$branches = array();
+	foreach ($output as $line) {
+		$branch = substr($line, 2, -5);
+		$branches[] = $branch;
+	}
+
+	foreach ($branches as $branch)
+		rebase_cve_branch($branch);
+
+	$result_str = "";
+	foreach ($branches as $branch) {
+		$num_ahead = check_if_cve_is_ahead($branch);
+		if ($num_ahead > 0)
+			$result_str .= $branch."-cves is ".$num_ahead." patches ahead and might need pushing\n";
+	}
+
+	msg("");
+	if ($result_str == "")
+		info("Everything is up-to-date. Nothing needs pushing.");
+	else
+		info($result_str);
+}
+
 function cmd_suse_cve($argv)
 {
 	$suse_repo_path = Options::get("suse-repo-path");
@@ -1130,7 +1164,6 @@ function cmd_suse_cve($argv)
 		if ($branch != "Quit")
 			cve_backport_branch($branch, $hashes[$branch], $refs);
 	} while ($branch != "Quit");
-
 }
 
 ?>

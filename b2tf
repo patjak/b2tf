@@ -2856,6 +2856,9 @@ function parse_options($argv)
 	case "suse-cve":
 		cmd_suse_cve($argv);
 		exit(0);
+	case "suse-cve-update":
+		cmd_suse_cve_update($argv);
+		exit(0);
 	}
 
 	Globals::$log->load($work_dir."/commits.log");
@@ -3023,6 +3026,8 @@ Commands:
   suse-blacklists-to-alt-commit - Convert all blacklisted duplicates to alt-commits
 
   suse-cve - Automate backport of CVE fixes to all affected SUSE branches
+
+  suse-cve-update - Update local branches and rebase CVE branches on top of them
 
   <ALL>
     --refs		- Provide contents of the reference tag
