@@ -1125,14 +1125,30 @@ function cmd_suse_cve($argv)
 		fatal("Failed to run check-kernel-fix scripts");
 
 	$output = implode(PHP_EOL, $output);
+	if (str_contains($output, "NO ACTION NEEDED")) {
+		msg("NO ACTION NEEDED: All relevant branches contain the fix!");
+		return;
+	}
+
 	$output = explode("ACTION NEEDED!\n", $output);
 	$actions = explode(PHP_EOL, $output[1]);
 
 	$hashes = array();
 	$branches = array();
 	foreach ($actions as $a) {
-		$branch = explode(": ", $a)[0];
-		$hash = explode("MANUAL: ", $a)[1];
+		if (trim($a) == "")
+			continue;
+
+		$branch = explode(": ", $a);
+		if (count($branch) !== 3)
+			continue;
+		$branch = $branch[0];
+
+		$hash = explode("MANUAL: ", $a);
+		if (count($hash) !== 2)
+			continue;
+		$hash = $hash[1];
+
 		foreach (explode(" ", $hash) as $str) {
 			if (strlen($str) == 40) {
 				$hash = $str;
