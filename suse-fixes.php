@@ -475,7 +475,14 @@ function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
 			$reason = $refs.": ".$reason;
 	}
 
-	exec("echo \"".$p->commit_id." # ".$reason."\" >> ".$suse_repo_path."/blacklist.conf");
+	// Sometimes the blacklist.conf file isn't ended with a new line and we must fix that
+	$bl_file = file_get_contents($suse_repo_path."/blacklist.conf");
+	if (substr($bl_file, -1) != PHP_EOL)
+		$eol = PHP_EOL;
+	else
+		$eol = "";
+
+	exec("echo \"".$eol.$p->commit_id." # ".$reason."\" >> ".$suse_repo_path."/blacklist.conf");
 	msg("Blacklisting: ".$p->commit_id." # ".$reason);
 
 	$git->cmd("git log --oneline -n1 ".$p->commit_id, $oneline, $res);
