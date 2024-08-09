@@ -1173,6 +1173,11 @@ function cmd_suse_cve($argv)
 	msg("\nPossibly affected branches:");
 
 	do {
+		// Get current branch so we can restore it after all checks
+		unset($output);
+		exec($pre."git rev-parse --abbrev-ref HEAD", $output, $code);
+		$old_branch = $output[0];
+
 		$i = 1;
 		foreach ($branches as $branch) {
 			$status = "";
@@ -1182,6 +1187,8 @@ function cmd_suse_cve($argv)
 
 			msg($i++.") ".str_pad($branch, 20, " ").$status);
 		}
+
+		exec($pre."git checkout ".$old_branch." 2>&1");
 
 		$branch = Util::ask_from_array($branches, "Select branch for backporting: ", FALSE);
 		if ($branch != "Quit")
