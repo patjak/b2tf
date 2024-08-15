@@ -1142,6 +1142,25 @@ function cmd_apply($argv)
 	exit();
 }
 
+function cmd_abort($argv)
+{
+	$work_dir = Options::get("work-dir");
+	$force = Options::get("force", FALSE);
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$git->change_branch();
+
+	$git->cmd("git cherry-pick --abort");
+
+	$commit_id = $log->get_next_commit();
+	$p = new Patch();
+	$p->parse_from_git($commit_id);
+	msg("Aborted cherry-pick of ".$commit_id." ".$p->subject);
+}
+
+
 function cmd_skip($argv)
 {
 	$work_dir = Options::get("work-dir");
@@ -2875,6 +2894,9 @@ function parse_options($argv)
 	case "apply":
 		cmd_apply($argv);
 		exit(0);
+	case "abort":
+		cmd_abort($argv);
+		exit(0);
 	case "skip":
 		cmd_skip($argv);
 		exit(0);
@@ -2995,6 +3017,8 @@ Commands:
   export - Runs git-format-patch over the specified range
 
   apply - Start re-applying the series
+
+  abort - Abort ongoing cherry-pick
 
   skip - Skip the current commit
 
