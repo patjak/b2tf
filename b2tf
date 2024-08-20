@@ -3001,18 +3001,13 @@ Usage: <?= $argv[0] ?> <options> <command>
 
 Commands:
   setup - Setup all backporting parameters
-    --start=<range-start>
-    --stop=<range-stop>
-    --branch=<name-of-branch-to-do-backport-in>
-    --work-dir=<working-directory>
-    --git-dir=<git-repository-directory>
-    --paths=<paths-in-git-repo-to-backport>
-    Example:
-    <?= $argv[0] ?> \
-      --start=v5.4 --stop=v5.5 --branch=my-backport \
-      --work-dir=./empty-dir --git-dir=./linux-git \
-      --paths="include/drm/ drivers/gpu/drm/" \
-      setup
+    --range-start=<At which revision in the git history to start backporting>
+    --range-stop=<At which revision in the git history to stop backporting>
+    --branch=<The name of the branch where to put backported commits>
+    --branch-point=<The revision at where the branch starts>
+    --work-dir=<working directory>
+    --git-dir=<git repository directory>
+    --paths=<paths in git repo to backport>
 
   export - Runs git-format-patch over the specified range
 
@@ -3030,6 +3025,8 @@ Commands:
   status - Show current status of backport and git repo
 
   resolve <commit-id> - Resolve conflicts from the specified commit
+
+SUSE specific commands:
 
   suse-export - Export the finished set of backported patches
 
