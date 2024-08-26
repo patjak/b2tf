@@ -907,6 +907,11 @@ function cmd_suse_blacklists_to_alt_commit($argv)
 	$blacklist = explode(PHP_EOL, $blacklist_file);
 
 	$num_skip = 0;
+	$line_count = 1;
+	$num_lines = count($blacklist);
+
+	msg("");
+
 	foreach ($blacklist as $line) {
 		$words = explode(" ", $line);
 
@@ -936,13 +941,14 @@ function cmd_suse_blacklists_to_alt_commit($argv)
 					continue;
 				}
 
-				msg($id." ".$word.": ".$filename);
+				msg("\n".$id." ".$word.": ".$filename);
 				insert_tags_in_patch($suse_repo_path."/patches.suse/".$filename, array("Alt-commit: ".$id));
 				remove_blacklist_entry($id);
 				passthru($suse_repo_path."/scripts/log");
 			}
 		}
 
+		msg("\rProgress: ".$line_count++."/".$num_lines." : ", FALSE);
 	}
 }
 
