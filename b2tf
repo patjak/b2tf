@@ -166,6 +166,9 @@ class Patch {
 	 */
 	public static function get_patches($patch_dir) {
 		$files = get_patch_filenames($patch_dir);
+		if ($files === FALSE)
+			return FALSE;
+
 		$patches = array();
 		foreach ($files as $file) {
 			$p = new Patch();
@@ -881,6 +884,9 @@ function array_to_str($array)
 function get_patch_filenames($dir)
 {
 	$dir = realpath($dir);
+	if ($dir === FALSE)
+		return FALSE;
+
 	exec("find ".$dir."| sort | grep \"\\.patch\"", $files);
 
 	return $files;
@@ -2184,6 +2190,9 @@ function cmd_suse_unblacklist($argv)
 
 	info("Unblacklisting patches...");
 	$patches = Patch::get_patches($work_dir."/patches.suse");
+	if ($patches === FALSE)
+		fatal("Failed to find any patches in ".$work_dir."/patches.suse");
+
 	$matches = array();
 	$blacklists = get_suse_blacklists($suse_repo_path);
 
