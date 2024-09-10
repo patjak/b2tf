@@ -1134,8 +1134,15 @@ function cmd_suse_cve($argv)
 	unset($output);
 	exec($pre."./scripts/check-kernel-fix ".$cve, $output, $code);
 
+	if ($code != 0) {
+		error("Failed to run check-kernel-fix scripts");
+
+		$params = Util::get_line("Enter additional parameters: ");
+		unset($output);
+		exec($pre."./scripts/check-kernel-fix ".$params." ".$cve, $output, $code);
+	}
 	if ($code != 0)
-		fatal("Failed to run check-kernel-fix scripts");
+		fatal("Still not working. Aborting!");
 
 	$output = implode(PHP_EOL, $output);
 	if (str_contains($output, "NO ACTION NEEDED")) {
