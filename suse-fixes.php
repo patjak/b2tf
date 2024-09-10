@@ -1181,6 +1181,7 @@ function cmd_suse_cve($argv)
 		$hashes[$branch] = $hash;
 		$branches[] = $branch;
 	}
+	asort($branches);
 	$branches[] = "Quit";
 
 	msg("\nPossibly affected branches:");
