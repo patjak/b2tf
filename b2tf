@@ -1294,8 +1294,12 @@ function cmd_insert($argv)
 
 	$commit_id = $argv[2];
 
-	$last_commit_id = $log->get_last_commit();
-	$log->insert_commit($commit_id, $last_commit_id[0]);
+	if (!isset($argv[3]))
+		$last_commit_id = $log->get_last_commit()[0];
+	else
+		$last_commit_id = $argv[3];
+
+	$log->insert_commit($commit_id, $last_commit_id);
 
 	$p = new Patch();
 	$p->parse_from_git($commit_id);
@@ -3101,7 +3105,7 @@ Commands:
 
   skip - Skip the current commit
 
-  insert <hash> - Inserts a commit into the current position in the log
+  insert <hash> [after hash]- Inserts a commit into the current position in the log or after specified hash
 
   diff [files] - Show diff between current tree vs target tree
 
