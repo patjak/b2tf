@@ -425,6 +425,63 @@ class Log {
 	}
 
 	/**
+	 * Insert a commit after a specified commit (can be both upstream of backported commit id)
+	 *
+	 * @param $new_commit_id
+	 * @param $after_commit_id
+	 * @return FALSE on failure
+	 */
+	public function insert_commit($new_commit_id, $after_commit_id) {
+		if ($this->filename === FALSE)
+			return FALSE;
+
+		$body = explode(PHP_EOL, $this->get_body());
+
+		$p = new Patch();
+		$ret = $p->parse_from_git($new_commit_id);
+		if ($ret === FALSE)
+			fatal("Couldn't find upstream commit ".$new_commit_id);
+
+		$p_after = new Patch();
+		$ret = $p_after->parse_from_git($after_commit_id);
+		if ($ret === FALSE)
+			fatal("Couldn't find commit id: ".$after_commit_id);
+
+		// Find row
+		$found = FALSE;
+		$new_body = array();
+		for ($i = 0; $i < count($body); $i++) {
+			$new_body[] = $body[$i];
+
+			$line = $body[$i];
+			if (trim($line) == "")
+				continue;
+
+			$line = explode(" ", $line);
+			if ($line[0] == "#")
+				continue;
+
+			if (count($line) != 2)
+				continue;
+	
+			if ($line[0] == $p_after->commit_id || $line[1] == $p_after->commit_id) {
+				$new_body[] = "";
+				$new_body[] = "# ".$p->subject;
+				$new_body[] = $p->commit_id;
+				$found = TRUE;
+			}
+		}
+
+		if (!$found)
+			fatal("Couldn't find commit in log\n".$p_after->subject." ".$p_after->commit_id);
+
+		$new_body = implode(PHP_EOL, $new_body);
+		$this->set_body($new_body);
+		$this->save();
+
+	}
+
+	/**
 	 * Get all commits from the log
 	 *
 	 * @return Returns an array will all log commits in the format:
@@ -1213,6 +1270,38 @@ function cmd_skip($argv)
 	$p = new Patch();
 	$p->parse_from_git($commit_id);
 	msg("Skipped ".$commit_id." ".$p->subject);
+}
+
+function cmd_insert($argv)
+{
+	$work_dir = Options::get("work-dir");
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$branch = Options::get("branch");
+	$range_start = Options::get("range-start");
+
+	$git->change_branch();
+
+	if ($git->check_any_session()) {
+		error("In a conflict session. Run abort or apply before continuing");
+		return;
+	}
+
+	if (!isset($argv[2]))
+		fatal("Commit id not specified");
+
+	$commit_id = $argv[2];
+
+	$last_commit_id = $log->get_last_commit();
+	$log->insert_commit($commit_id, $last_commit_id[0]);
+
+	$p = new Patch();
+	$p->parse_from_git($commit_id);
+
+	msg($p->commit_id." ".$p->subject);
+	msg("Successfully inserted into log. Run apply to continue.");
 }
 
 function cmd_setup($argv)
@@ -2895,6 +2984,9 @@ function parse_options($argv)
 	case "skip":
 		cmd_skip($argv);
 		exit(0);
+	case "insert":
+		cmd_insert($argv);
+		exit(0);
 	case "restart":
 		cmd_restart($argv);
 		exit(0);
@@ -3008,6 +3100,8 @@ Commands:
   abort - Abort ongoing cherry-pick
 
   skip - Skip the current commit
+
+  insert <hash> - Inserts a commit into the current position in the log
 
   diff [files] - Show diff between current tree vs target tree
 
