@@ -1051,12 +1051,14 @@ function cmd_apply($argv)
 				// If all conflicts are fixed we automatically add them
 				// User can also force the changes even with conflicts by adding the --force option
 				if ($git->check_for_conflicts() == FALSE) {
-					cmd_add($argv);
+					$git->add_all_unmerged();
+					return;
 				} else {
 					error("Unmerged paths still contain conflicts");
 					if ($force == TRUE) {
 						info("Force adding since --force was specified. Rerun apply to continue.");
-						cmd_add($argv);
+						$git->add_all_unmerged();
+						return;
 					} else {
 						msg("Add option --force to add all files anyway");
 					}
@@ -1119,8 +1121,8 @@ function cmd_apply($argv)
 
 			// If all conflicts are fixed we automatically add them
 			if ($git->check_for_conflicts() == FALSE) {
-				cmd_add($argv);
-				exit(0);
+				$git->add_all_unmerged();
+				return;
 			} else {
 				error("Unmerged paths still contain conflicts");
 			}
@@ -1235,22 +1237,6 @@ function cmd_setup($argv)
 	$log->save($work_dir."/commits.log");
 
 	info("Setup saved to ".$work_dir."/commits.log");
-	exit(0);
-}
-
-function cmd_add($argv)
-{
-	$work_dir = Options::get("work-dir");
-	$git = Globals::$git;
-
-	$branch = Options::get("branch");
-	if ($branch == "")
-		fatal("Invalid branch in commit.log. Perhaps rerun setup?");
-
-	$git->change_branch();
-
-	$git->add_all_unmerged();
-
 	exit(0);
 }
 
@@ -2908,9 +2894,6 @@ function parse_options($argv)
 		exit(0);
 	case "skip":
 		cmd_skip($argv);
-		exit(0);
-	case "add":
-		cmd_add($argv);
 		exit(0);
 	case "restart":
 		cmd_restart($argv);
