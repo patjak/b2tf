@@ -1308,6 +1308,27 @@ function cmd_insert($argv)
 	msg("Successfully inserted into log. Run apply to continue.");
 }
 
+function cmd_next($argv)
+{
+	$work_dir = Options::get("work-dir");
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$branch = Options::get("branch");
+	$range_start = Options::get("range-start");
+
+	$git->change_branch();
+
+	$next_commit_id = $log->get_next_commit();
+
+	$p = new Patch();
+	$p->parse_from_git($next_commit_id);
+
+	msg("Next commit to be applied is:");
+	msg($p->commit_id." ".$p->subject);
+}
+
 function cmd_setup($argv)
 {
 	Globals::$log = new Log();
@@ -2991,6 +3012,9 @@ function parse_options($argv)
 	case "insert":
 		cmd_insert($argv);
 		exit(0);
+	case "next":
+		cmd_next($argv);
+		exit(0);
 	case "restart":
 		cmd_restart($argv);
 		exit(0);
@@ -3106,6 +3130,8 @@ Commands:
   skip - Skip the current commit
 
   insert <hash> [after hash]- Inserts a commit into the current position in the log or after specified hash
+
+  next - Show the hash and subject of the next commit to be applied
 
   diff [files] - Show diff between current tree vs target tree
 
