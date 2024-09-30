@@ -1332,6 +1332,24 @@ function cmd_next($argv)
 	msg($p->commit_id." ".$p->subject);
 }
 
+function cmd_show($argv)
+{
+	$work_dir = Options::get("work-dir");
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$branch = Options::get("branch");
+	$range_start = Options::get("range-start");
+
+	$git->change_branch();
+
+	$next_commit_id = $log->get_next_commit();
+
+	msg("cd ".$git->get_dir()." && tig show ".$next_commit_id);
+	passthru("cd ".$git->get_dir()." && tig show ".$next_commit_id);
+}
+
 function cmd_setup($argv)
 {
 	Globals::$log = new Log();
@@ -3018,6 +3036,9 @@ function parse_options($argv)
 	case "next":
 		cmd_next($argv);
 		exit(0);
+	case "show":
+		cmd_show($argv);
+		exit(0);
 	case "restart":
 		cmd_restart($argv);
 		exit(0);
@@ -3135,6 +3156,8 @@ Commands:
   insert <hash> [after hash]- Inserts a commit into the current position in the log or after specified hash
 
   next - Show the hash and subject of the next commit to be applied
+
+  show - Show the next commit (eg. git show)
 
   diff [files] - Show diff between current tree vs target tree
 
