@@ -1261,7 +1261,10 @@ function cmd_skip($argv)
 	if ($i == count($body))
 		fatal("Couldn't find upstream commit: ".$upstream_id);
 
-	$git->cmd("git cherry-pick --abort");
+	if ($git->check_cherrypick_session())
+		$git->cmd("git cherry-pick --abort");
+	else if ($git->check_any_session())
+		fatal("In AM or rebase session. Cannot skip");
 
 	$body = implode(PHP_EOL, $body);
 	$log->set_body($body);
