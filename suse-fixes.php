@@ -1184,6 +1184,9 @@ function cmd_suse_cve($argv)
 	asort($branches);
 	$branches[] = "Quit";
 
+	// We must reindex the array
+	$branches = array_values($branches);
+
 	msg("\nPossibly affected branches:");
 
 	do {
