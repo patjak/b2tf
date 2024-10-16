@@ -3095,6 +3095,8 @@ $opts = array(
 	"signature:",
 	"skip-review",
 	"skip-fails",
+	"blacklist-all",
+	"reason:",
 	"refs:",
 	"release:",
 	"repo-tag:",
@@ -3185,6 +3187,8 @@ SUSE specific commands:
     --fixes-url		- provide URL containing fixes
     --skip-review	- Assume all patches need to be backported
     --skip-fails	- Skip patches that doesn't apply cleanly
+    --blacklist-all	- Blacklist all patches
+    --reason		- Reason for blacklisting
 
   suse-blacklists-to-alt-commit - Convert all blacklisted duplicates to alt-commits
 

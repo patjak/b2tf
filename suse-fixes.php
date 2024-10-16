@@ -458,8 +458,17 @@ function find_valid_filename($filename, $path)
 
 function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
 {
-	$reasons = array("comment fixes", "documentation fixes", "not applicable", "other");
+	$reasons = array("comment fixes", "documentation fixes", "not applicable", "Will be unblacklisted by DRM backport", "other");
 
+	// If no reason was passed to this function, check if one was passed as an Option
+	if ($reason == "") {
+		if (isset(Options::$options['reason']))
+			$reason = Options::get("reason");
+		else
+			$reason = "";
+	}
+
+	// If it's still empty, try asking the user for a reason
 	if ($reason == "") {
 		for ($i = 0; $i < count($reasons); $i++)
 			msg(($i + 1).") ".$reasons[$i]);
@@ -553,6 +562,9 @@ function cmd_suse_fixes($argv)
 	$fixes_url = Options::get("fixes-url", FALSE);
 	$skip_review = Options::get("skip-review", FALSE);
 	$branch = Options::get("branch", FALSE);
+
+	// Blacklist all patches with provided reason
+	$blacklist_all = Options::get("blacklist-all", FALSE);
 
 	// Skip all patches that doesn't immediately applies
 	$skip_fails = Options::get("skip-fails", FALSE);
@@ -662,6 +674,12 @@ function cmd_suse_fixes($argv)
 
 		if (in_array($p->commit_id, $suse_blacklists)) {
 			error("SKIP: Patch is blacklisted");
+			continue;
+		}
+
+		if ($blacklist_all) {
+			$res = suse_blacklist_patch($p, $suse_repo_path, $git);
+			$actually_backported++;
 			continue;
 		}
 
