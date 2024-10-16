@@ -818,8 +818,14 @@ function cmd_suse_fixes($argv)
 		}
 
 		if (!$skip_review) {
-			view_commit($hash, $git);
-			$backport = Util::ask("Backport patch? (Y)es, (n)o, (b)lacklist or (a)bort: ", array("y", "b", "n", "a"), "y");
+
+			$backport = "v";
+
+			while ($backport == "v") {
+				$backport = Util::ask("Backport patch? (Y)es, (n)o, (b)lacklist, (v)iew commit or (a)bort: ", array("y", "b", "n", "v", "a"), "y");
+				if ($backport == "v")
+					view_commit($hash, $git);
+			}
 
 			if ($backport == "a") {
 				undo_insert_and_sequence_patch($suse_repo_path, $filename);
