@@ -900,8 +900,8 @@ class GitRepo {
 		}
 
 		unset($res);
-		$this->cmd("git rev-list --no-merges -n1 --oneline HEAD --grep \"".
-			  addslashes($p->subject)."\"", $res);
+		$subject_stripped = str_replace("\"", "\\\"", $p->subject);
+		$this->cmd("git rev-list --no-merges -n1 --oneline HEAD --grep \"".$subject_stripped."\"", $res);
 
 		if (count($res) > 0) {
 			$commit_id = explode(" ", $res[0])[0];
