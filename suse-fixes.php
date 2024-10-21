@@ -458,6 +458,10 @@ function find_valid_filename($filename, $path)
 
 function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
 {
+
+	// Blacklist all patches with provided reason
+	$blacklist_all = Options::get("blacklist-all", FALSE);
+
 	$reasons = array("comment fixes", "documentation fixes", "not applicable", "Will be unblacklisted by DRM backport", "other");
 
 	// If no reason was passed to this function, check if one was passed as an Option
@@ -506,6 +510,10 @@ function suse_blacklist_patch($p, $suse_repo_path, $git, $reason = "")
 		info($oneline);
 		Util::pause();
 	}
+
+	// If we're blacklisting all patches we commit them all at once so skip this step
+	if ($blacklist_all)
+		return 0;
 
 	exec("cd ".$suse_repo_path." && git add blacklist.conf && git commit -m \"blacklist.conf: ".$oneline."\"", $out, $res);
 
@@ -896,6 +904,9 @@ function cmd_suse_fixes($argv)
 
 		$actually_backported++;
 	}
+
+	if ($actually_backported > 0 && $blacklist_all)
+		passthru("cd ".$suse_repo_path." && ./scripts/log", $res);
 
 	if ($actually_backported == 0)
 		msg("\nNothing got backported.");
