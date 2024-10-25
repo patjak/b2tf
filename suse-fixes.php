@@ -1075,14 +1075,19 @@ function check_if_cve_is_behind($branch)
 	return $num_behind;
 }
 
-function check_if_cve_is_ahead($branch)
+function check_if_cve_is_ahead($branch, $for_next = FALSE)
 {
 	$suse_repo_path = Options::get("suse-repo-path");
 	$pre = "cd ".$suse_repo_path." && ";
 
 	// Check if -cves branch is ahead
+	// FIXME hardcoded to pjakobsson
 	unset($output);
-	exec($pre."git rev-list --left-right --count ".$branch."..".$branch."-cves", $output, $code);
+	if ($for_next)
+		exec($pre."git rev-list --left-right --count origin/users/pjakobsson/".$branch."/for-next..".$branch."-cves", $output, $code);
+	else
+		exec($pre."git rev-list --left-right --count ".$branch."..".$branch."-cves", $output, $code);
+
 	if ($code != 0)
 		fatal("Failed to check if CVE branch is ahead");
 
@@ -1115,14 +1120,58 @@ function cmd_suse_cve_update($argv)
 	foreach ($branches as $branch) {
 		$num_ahead = check_if_cve_is_ahead($branch);
 		if ($num_ahead > 0)
-			$result_str .= $branch."-cves is ".$num_ahead." patches ahead and might need pushing\n";
+			$result_str .= $branch."-cves is ".$num_ahead." patches ahead ";
+		else
+			continue;
+
+		// Check if for-next branch exists for this branch. If not we assume it needs pushing
+		exec($pre."git ls-remote --exit-code --heads origin users/pjakobsson/".$branch."/for-next", $res, $code);
+		if ($code == 0)
+			$num_ahead = check_if_cve_is_ahead($branch, TRUE);
+
+		$push_needed = FALSE;
+		if ($num_ahead > 0) {
+			$result_str .= "(needs pushing to for-next)\n";
+			$push_needed = TRUE;
+		} else {
+			$result_str .= "(waiting to be merged)\n";
+		}
 	}
 
 	msg("");
-	if ($result_str == "")
+	if ($result_str == "") {
 		info("Everything is up-to-date. Nothing needs pushing.");
-	else
+		return;
+	} else {
 		info($result_str);
+	}
+
+	if (!$push_needed)
+		return;
+
+	$ask = Util::ask("Push branches (y/N)? ", array("y", "n"), "n");
+	if ($ask == "y") {
+		foreach ($branches as $branch) {
+
+			// Check if for-next branch exists for this branch. If not we assume it needs pushing
+			exec($pre."git ls-remote --exit-code --heads origin users/pjakobsson/".$branch."/for-next", $res, $code);
+			if ($code == 0)
+				$num_ahead = check_if_cve_is_ahead($branch, TRUE);
+			else
+				$num_ahead = 1;
+
+			if ($num_ahead > 0) {
+				// FIXME: Hardcoded to pjakobsson
+				$ask = Util::ask("Push ".$branch."-cves:users/pjakobsson/".$branch."/for-next (Y/n)? ", array("y", "n"), "y");
+
+				if ($ask == "y") {
+					passthru($pre."git push origin ".$branch."-cves:users/pjakobsson/".$branch."/for-next", $code);
+					if ($code != 0)
+						fatal("Failed to push: ".$branch."-cves:users/pjakobsson/".$branch."/for-next");
+				}
+			}
+		}
+	}
 }
 
 function cmd_suse_cve($argv)
