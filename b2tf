@@ -426,12 +426,13 @@ class Log {
 
 	/**
 	 * Insert a commit after a specified commit (can be both upstream of backported commit id)
+	 * If no $after_commit_id is specified the new_commit_id is inserted at the beginning
 	 *
 	 * @param $new_commit_id
 	 * @param $after_commit_id
 	 * @return FALSE on failure
 	 */
-	public function insert_commit($new_commit_id, $after_commit_id) {
+	public function insert_commit($new_commit_id, $after_commit_id = FALSE) {
 		if ($this->filename === FALSE)
 			return FALSE;
 
@@ -442,43 +443,49 @@ class Log {
 		if ($ret === FALSE)
 			fatal("Couldn't find upstream commit ".$new_commit_id);
 
-		$p_after = new Patch();
-		$ret = $p_after->parse_from_git($after_commit_id);
-		if ($ret === FALSE)
-			fatal("Couldn't find commit id: ".$after_commit_id);
+		if ($after_commit_id !== FALSE) {
+			$p_after = new Patch();
+			$ret = $p_after->parse_from_git($after_commit_id);
+			if ($ret === FALSE)
+				fatal("Couldn't find commit id: ".$after_commit_id);
 
-		// Find row
-		$found = FALSE;
-		$new_body = array();
-		for ($i = 0; $i < count($body); $i++) {
-			$new_body[] = $body[$i];
+			// Find row
+			$found = FALSE;
+			$new_body = array();
+			for ($i = 0; $i < count($body); $i++) {
+				$new_body[] = $body[$i];
 
-			$line = $body[$i];
-			if (trim($line) == "")
-				continue;
+				$line = $body[$i];
+				if (trim($line) == "")
+					continue;
 
-			$line = explode(" ", $line);
-			if ($line[0] == "#")
-				continue;
+				$line = explode(" ", $line);
+				if ($line[0] == "#")
+					continue;
 
-			if (count($line) != 2)
-				continue;
+				if (count($line) != 2)
+					continue;
 	
-			if ($line[0] == $p_after->commit_id || $line[1] == $p_after->commit_id) {
-				$new_body[] = "";
-				$new_body[] = "# ".$p->subject;
-				$new_body[] = $p->commit_id;
-				$found = TRUE;
+				if ($line[0] == $p_after->commit_id || $line[1] == $p_after->commit_id) {
+					$new_body[] = "";
+					$new_body[] = "# ".$p->subject;
+					$new_body[] = $p->commit_id;
+					$found = TRUE;
+				}
 			}
-		}
 
-		if (!$found)
-			fatal("Couldn't find commit in log\n".$p_after->subject." ".$p_after->commit_id);
+			if (!$found)
+				fatal("Couldn't find commit in log\n".$p_after->subject." ".$p_after->commit_id);
+		} else {
+			$new_body = $body;
+			if ($new_body[0] != "")
+				array_unshift($new_body, "");
+			array_unshift($new_body, "", "# ".$p->subject, $p->commit_id);
+		}
 
 		$new_body = implode(PHP_EOL, $new_body);
 		$this->set_body($new_body);
 		$this->save();
-
 	}
 
 	/**
@@ -1016,8 +1023,6 @@ function cmd_export($argv)
 	$git->cmd("git format-patch --no-renames --topo-order --keep-subject --no-merges -o ".
 		 $work_dir."/patches/ ".$start."..".$stop." -- ".$paths);
 
-	$log->set_body("#         <Upstream commit id>".
-		       "                   <Backported commit id>\n");
 	$files = get_patch_filenames($work_dir."/patches");
 	$patches = array();
 	foreach ($files as $file) {
@@ -1273,6 +1278,39 @@ function cmd_skip($argv)
 	$p = new Patch();
 	$p->parse_from_git($commit_id);
 	msg("Skipped ".$commit_id." ".$p->subject);
+}
+
+function cmd_prepend($argv)
+{
+	$work_dir = Options::get("work-dir");
+
+	$log = Globals::$log;
+	$git = Globals::$git;
+
+	$branch = Options::get("branch");
+	$range_start = Options::get("range-start");
+
+	$git->change_branch();
+
+	if ($git->check_any_session()) {
+		error("In a conflict session. Run abort or apply before continuing");
+		return;
+	}
+
+	if (!isset($argv[2]))
+		fatal("Commit id not specified");
+
+	$commit_id = $argv[2];
+
+	$commits = $log->get_last_commit()[0];
+
+	$log->insert_commit($commit_id);
+
+	$p = new Patch();
+	$p->parse_from_git($commit_id);
+
+	msg($p->commit_id." ".$p->subject);
+	msg("Successfully inserted into log. Patch now needs to be applied!");
 }
 
 function cmd_insert($argv)
@@ -3030,6 +3068,9 @@ function parse_options($argv)
 	case "skip":
 		cmd_skip($argv);
 		exit(0);
+	case "prepend":
+		cmd_prepend($argv);
+		exit(0);
 	case "insert":
 		cmd_insert($argv);
 		exit(0);
@@ -3154,6 +3195,8 @@ Commands:
   abort - Abort ongoing cherry-pick
 
   skip - Skip the current commit
+
+  prepend <hash> - Insert commit at the very beginning of the log
 
   insert <hash> [after hash]- Inserts a commit into the current position in the log or after specified hash
 
