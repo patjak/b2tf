@@ -3151,6 +3151,7 @@ $opts = array(
 	"only-alt-commits",
 	"exclude:",
 	"cve:",
+	"breaker:",
 	"debug",
 	"debug-git",
 	);
@@ -3236,6 +3237,8 @@ SUSE specific commands:
   suse-blacklists-to-alt-commit - Convert all blacklisted duplicates to alt-commits
 
   suse-cve - Automate backport of CVE fixes to all affected SUSE branches
+    --cve <CVE>			  - Which CVE to process
+    --breaker <breaker commit id> - Specifies any identified breaker commit
 
   suse-cve-update - Update local branches and rebase CVE branches on top of them
 

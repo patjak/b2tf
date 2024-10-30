@@ -1179,6 +1179,7 @@ function cmd_suse_cve($argv)
 	$suse_repo_path = Options::get("suse-repo-path");
 	$pre = "cd ".$suse_repo_path." && ";
 	$cve = Options::get("cve");
+	$breaker = Options::get("breaker", false);
 	$git = Globals::$git;
 
 	unset($output);
@@ -1205,6 +1206,9 @@ function cmd_suse_cve($argv)
 			msg("Score:\t\t".$score);
 		msg("References:\t".$refs);
 
+		if ($breaker)
+			info("Breaker commit:\t".$breaker);
+
 		$bsc_id = explode("bsc#", $refs);
 		if (isset($bsc_id[1])) {
 			$bsc_id = explode(" ", $bsc_id[1])[0];
@@ -1216,7 +1220,10 @@ function cmd_suse_cve($argv)
 	}
 
 	unset($output);
-	exec($pre."./scripts/check-kernel-fix ".$cve, $output, $code);
+	$breaker_str = "";
+	if ($breaker)
+		$breaker_str = "-f ".$breaker;
+	exec($pre."./scripts/check-kernel-fix ".$breaker_str." ".$cve, $output, $code);
 
 	if ($code != 0) {
 		error("Failed to run check-kernel-fix scripts");
