@@ -1084,7 +1084,7 @@ function check_if_cve_is_ahead($branch, $for_next = FALSE)
 	// FIXME hardcoded to pjakobsson
 	unset($output);
 	if ($for_next)
-		exec($pre."git rev-list --left-right --count origin/users/pjakobsson/".$branch."/for-next..".$branch."-cves", $output, $code);
+		exec($pre."git rev-list --left-right --count ".$branch."..origin/users/pjakobsson/".$branch."/for-next", $output, $code);
 	else
 		exec($pre."git rev-list --left-right --count ".$branch."..".$branch."-cves", $output, $code);
 
@@ -1117,6 +1117,7 @@ function cmd_suse_cve_update($argv)
 		rebase_cve_branch($branch);
 
 	$result_str = "";
+	$push_needed = FALSE;
 	foreach ($branches as $branch) {
 		$num_ahead = check_if_cve_is_ahead($branch);
 		if ($num_ahead > 0)
@@ -1129,8 +1130,7 @@ function cmd_suse_cve_update($argv)
 		if ($code == 0)
 			$num_ahead = check_if_cve_is_ahead($branch, TRUE);
 
-		$push_needed = FALSE;
-		if ($num_ahead > 0) {
+		if ($num_ahead == 0) {
 			$result_str .= "(needs pushing to for-next)\n";
 			$push_needed = TRUE;
 		} else {
@@ -1153,14 +1153,18 @@ function cmd_suse_cve_update($argv)
 	if ($ask == "y") {
 		foreach ($branches as $branch) {
 
+			if (check_if_cve_is_ahead($branch) == 0)
+				continue;
+
 			// Check if for-next branch exists for this branch. If not we assume it needs pushing
 			exec($pre."git ls-remote --exit-code --heads origin users/pjakobsson/".$branch."/for-next", $res, $code);
 			if ($code == 0)
 				$num_ahead = check_if_cve_is_ahead($branch, TRUE);
 			else
-				$num_ahead = 1;
+				$num_ahead = 0;
 
-			if ($num_ahead > 0) {
+			// If for-next branch is not ahead it must have been merged so the cve branch needs pushing to for-next
+			if ($num_ahead == 0) {
 				// FIXME: Hardcoded to pjakobsson
 				$ask = Util::ask("Push ".$branch."-cves:users/pjakobsson/".$branch."/for-next (Y/n)? ", array("y", "n"), "y");
 
