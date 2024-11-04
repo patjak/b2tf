@@ -1299,8 +1299,6 @@ function cmd_prepend($argv)
 
 	$commit_id = $argv[2];
 
-	$commits = $log->get_last_commit()[0];
-
 	$log->insert_commit($commit_id);
 
 	$p = new Patch();
