@@ -2991,20 +2991,15 @@ function cmd_list_cherry_picks($argv)
 	$body = explode(PHP_EOL, $body);
 	foreach ($body as $line) {
 		$line = explode(" ", $line);
-		if (count($line) < 3)
-			continue;
-		if ($line[1] != "cherry-picked-by")
+		if (count($line) < 2)
 			continue;
 
-		$p1 = new Patch();
-		$p1->parse_from_git($line[0]);
-		$p2 = new Patch();
-		$p2->parse_from_git($line[2]);
+		// Empty commits can also be cherry-picks
+		$line[1] = trim($line[1]);
+		if ($line[1] != "cherry-picked-by" && $line[1] != "empty")
+			continue;
 
-		if ($p1->subject != $p2->subject)
-			error("Subjects doesn't match");
-
-		msg($line[0]." # Duplicate of ".$p2->commit_id.": ".$p2->subject);
+		msg($line[0]);
 	}
 }
 
@@ -3210,6 +3205,8 @@ Commands:
   status - Show current status of backport and git repo
 
   resolve <commit-id> - Resolve conflicts from the specified commit
+
+  list-cherry-picks - Show all commits that got marked as cherry-pick or empty
 
 SUSE specific commands:
 
